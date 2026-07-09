@@ -1,5 +1,5 @@
 import Mock from "mockjs";
-import type { LogLevel, Rule, StagedRule, UfwStatus } from "@ufw-webui/shared";
+import type { FirewallPolicy, LogLevel, Rule, StagedRule, UfwStatus } from "@ufw-webui/shared";
 
 type MockRequest = {
   body: string;
@@ -8,12 +8,30 @@ type MockRequest = {
 
 const ANYWHERE_LABEL = "모든 곳";
 
+// 정책 필드를 가진 객체 보정. 누락이면 "allow".
+const withPolicy = <T extends { from: string; to: string }>(
+  r: T,
+): T & { policy: FirewallPolicy } => ({
+  ...r,
+  policy: (r as { policy?: FirewallPolicy }).policy ?? "allow",
+});
+
+const isPolicy = (v: unknown): v is FirewallPolicy =>
+  v === "allow" || v === "deny";
+
+const policyLabel = (p: FirewallPolicy | undefined): string =>
+  p === "deny" ? "차단" : "허용";
+
+// 정책 포함 규칙 매칭. 정책이 다른 규칙은 별개로 인식.
+const rulesEqual = (a: { from: string; to: string; policy?: FirewallPolicy }, b: { from: string; to: string; policy?: FirewallPolicy }) =>
+  a.from === b.from && a.to === b.to && (a.policy ?? "allow") === (b.policy ?? "allow");
+
 let ufwStatus: UfwStatus = {
   active: true,
   rules: [
-    { from: "10022/tcp", to: ANYWHERE_LABEL },
-    { from: ANYWHERE_LABEL, to: "10.0.0.0/8" },
-    { from: ANYWHERE_LABEL, to: "192.168.0.0/16" },
+    withPolicy({ from: "10022/tcp", to: ANYWHERE_LABEL }),
+    withPolicy({ from: ANYWHERE_LABEL, to: "10.0.0.0/8" }),
+    withPolicy({ from: ANYWHERE_LABEL, to: "192.168.0.0/16" }),
   ],
 };
 
@@ -27,9 +45,10 @@ const generateId = () =>
     ? crypto.randomUUID()
     : `mock-${Math.random().toString(36).slice(2, 10)}`;
 
-const parseRule = (rule: Rule): { from: string; to: string } => ({
+const parseRule = (rule: Rule): { from: string; to: string; policy: FirewallPolicy } => ({
   from: (rule.from ?? "").trim(),
   to: (rule.to ?? "").trim(),
+  policy: isPolicy(rule.policy) ? rule.policy : "allow",
 });
 
 // ── 기존 UFW 상태 / 즉시 적용 ───────────────────────────────────────────
@@ -60,9 +79,7 @@ Mock.mock("/api/ufw/delete", "post", (options: MockRequest) => {
   const target = parseRule(body.rule);
   ufwStatus = {
     ...ufwStatus,
-    rules: ufwStatus.rules.filter(
-      (rule) => !(rule.from === target.from && rule.to === target.to),
-    ),
+    rules: ufwStatus.rules.filter((rule) => !rulesEqual(rule, target)),
   };
   return { success: true, message: "규칙이 삭제되었습니다." };
 });
@@ -83,6 +100,7 @@ Mock.mock("/api/ufw/staged", "post", (options: MockRequest) => {
     action: body.rule.action === "delete" ? "delete" : "add",
     from: (body.rule.from ?? "").trim(),
     to: (body.rule.to ?? "").trim(),
+    policy: isPolicy(body.rule.policy) ? body.rule.policy : "allow",
     note: body.rule.note?.trim() || undefined,
     createdAt: Date.now(),
   };
@@ -109,9 +127,7 @@ Mock.mock(RegExp("^/api/ufw/staged/[^/]+/apply$"), "post", (options: MockRequest
   if (target.action === "delete") {
     ufwStatus = {
       ...ufwStatus,
-      rules: ufwStatus.rules.filter(
-        (rule) => !(rule.from === target.from && rule.to === target.to),
-      ),
+      rules: ufwStatus.rules.filter((rule) => !rulesEqual(rule, target)),
     };
   } else {
     ufwStatus = { ...ufwStatus, rules: [...ufwStatus.rules, target] };
@@ -131,9 +147,7 @@ Mock.mock("/api/ufw/staged/apply-all", "post", () => {
       if (rule.action === "delete") {
         ufwStatus = {
           ...ufwStatus,
-          rules: ufwStatus.rules.filter(
-            (r) => !(r.from === rule.from && r.to === rule.to),
-          ),
+          rules: ufwStatus.rules.filter((r) => !rulesEqual(r, rule)),
         };
       } else {
         ufwStatus = { ...ufwStatus, rules: [...ufwStatus.rules, rule] };
@@ -142,7 +156,7 @@ Mock.mock("/api/ufw/staged/apply-all", "post", () => {
       appliedIds.push(rule.id);
     } catch (error) {
       errors.push(
-        `${rule.action === "add" ? "추가" : "삭제"} ${rule.from || "모든 곳"} → ${rule.to || "모든 곳"}: ${String(error)}`,
+        `${rule.action === "add" ? "추가" : "삭제"} ${policyLabel(rule.policy)} ${rule.from || "모든 곳"} → ${rule.to || "모든 곳"}: ${String(error)}`,
       );
     }
   }
@@ -205,7 +219,7 @@ Mock.mock(RegExp("^/api/ufw/logs(\\?.*)?$"), "get", (options: MockRequest) => {
 type BulkBody = {
   mode: "apply" | "monitor";
   action: "add" | "delete";
-  rules: { from: string; to: string; note?: string }[];
+  rules: { from: string; to: string; note?: string; policy?: FirewallPolicy }[];
 };
 
 const generateBulkId = () =>
@@ -225,6 +239,7 @@ Mock.mock("/api/ufw/bulk", "post", (options: MockRequest) => {
   for (const raw of rules) {
     const from = (raw.from ?? "").trim();
     const to = (raw.to ?? "").trim();
+    const policy: FirewallPolicy = isPolicy(raw.policy) ? raw.policy : "allow";
     if (!from && !to) {
       errors.push(`from 또는 to 중 하나는 필요합니다: from='${from}' to='${to}'`);
       continue;
@@ -237,6 +252,7 @@ Mock.mock("/api/ufw/bulk", "post", (options: MockRequest) => {
           action,
           from,
           to,
+          policy,
           note: raw.note?.trim() || undefined,
           createdAt: Date.now(),
         },
@@ -247,16 +263,16 @@ Mock.mock("/api/ufw/bulk", "post", (options: MockRequest) => {
         if (action === "delete") {
           ufwStatus = {
             ...ufwStatus,
-            rules: ufwStatus.rules.filter(
-              (r) => !(r.from === from && r.to === to),
-            ),
+            rules: ufwStatus.rules.filter((r) => !rulesEqual(r, { from, to, policy })),
           };
         } else {
-          ufwStatus = { ...ufwStatus, rules: [...ufwStatus.rules, { from, to }] };
+          ufwStatus = { ...ufwStatus, rules: [...ufwStatus.rules, { from, to, policy }] };
         }
         applied += 1;
       } catch (error) {
-        errors.push(`${from || "모든 곳"} → ${to || "모든 곳"}: ${String(error)}`);
+        errors.push(
+          `${policyLabel(policy)} ${from || "모든 곳"} → ${to || "모든 곳"}: ${String(error)}`,
+        );
       }
     }
   }
@@ -280,8 +296,8 @@ Mock.mock("/api/ufw/bulk", "post", (options: MockRequest) => {
 // ── 규칙 수정 (delete + add) ─────────────────────────────────────────
 
 type UpdateBody = {
-  old: { from: string; to: string };
-  new: { from: string; to: string };
+  old: { from: string; to: string; policy?: FirewallPolicy };
+  new: { from: string; to: string; policy?: FirewallPolicy };
   mode: "apply" | "monitor";
   note?: string;
 };
@@ -290,8 +306,10 @@ Mock.mock("/api/ufw/update", "post", (options: MockRequest) => {
   const body = JSON.parse(options.body) as UpdateBody;
   const oldFrom = (body.old.from ?? "").trim();
   const oldTo = (body.old.to ?? "").trim();
+  const oldPolicy: FirewallPolicy = isPolicy(body.old.policy) ? body.old.policy : "allow";
   const newFrom = (body.new.from ?? "").trim();
   const newTo = (body.new.to ?? "").trim();
+  const newPolicy: FirewallPolicy = isPolicy(body.new.policy) ? body.new.policy : "allow";
   const mode = body.mode === "monitor" ? "monitor" : "apply";
 
   if (!oldFrom && !oldTo) {
@@ -299,6 +317,13 @@ Mock.mock("/api/ufw/update", "post", (options: MockRequest) => {
   }
   if (!newFrom && !newTo) {
     return { success: false, error: "new 의 from 또는 to 중 하나는 필요합니다." };
+  }
+  if (oldPolicy !== newPolicy) {
+    return {
+      success: false,
+      error:
+        "정책(허용/차단) 은 update 로 변경할 수 없습니다. 기존 규칙을 삭제하고 새로 추가하세요.",
+    };
   }
 
   if (mode === "monitor") {
@@ -309,9 +334,10 @@ Mock.mock("/api/ufw/update", "post", (options: MockRequest) => {
         action: "update" as const,
         from: newFrom,
         to: newTo,
+        policy: newPolicy,
         note: body.note?.trim() || undefined,
         createdAt: Date.now(),
-        old: { from: oldFrom, to: oldTo },
+        old: { from: oldFrom, to: oldTo, policy: oldPolicy },
       },
     ];
     return {
@@ -330,10 +356,10 @@ Mock.mock("/api/ufw/update", "post", (options: MockRequest) => {
     ufwStatus = {
       ...ufwStatus,
       rules: ufwStatus.rules.filter(
-        (r) => !(r.from === oldFrom && r.to === oldTo),
+        (r) => !rulesEqual(r, { from: oldFrom, to: oldTo, policy: oldPolicy }),
       ),
     };
-    ufwStatus = { ...ufwStatus, rules: [...ufwStatus.rules, { from: newFrom, to: newTo }] };
+    ufwStatus = { ...ufwStatus, rules: [...ufwStatus.rules, { from: newFrom, to: newTo, policy: newPolicy }] };
   }
   return {
     success: true,

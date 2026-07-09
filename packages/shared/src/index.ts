@@ -1,6 +1,12 @@
+// UFW 정책(액션) — allow | deny 만 지원.
+//   "allow" = 통과, "deny" = 무음 차단.
+// 정책은 옵셔널. 누락 시 클라이언트/서버 양쪽에서 "allow" 로 보정한다.
+export type FirewallPolicy = "allow" | "deny";
+
 export interface Rule {
   from: string;
   to: string;
+  policy?: FirewallPolicy;
 }
 
 export interface UfwStatus {
@@ -19,7 +25,7 @@ export interface StagedRule extends Rule {
   note?: string;
   createdAt: number;
   // action="update" 일 때만 사용. 교체 대상이 된 원본 규칙.
-  old?: { from: string; to: string };
+  old?: { from: string; to: string; policy?: FirewallPolicy };
 }
 
 // UFW 로그 한 줄을 구조화한 형태. tail -F 의 stdout 한 줄 = LogLine 1개.
@@ -42,8 +48,10 @@ export type LogLevel = "off" | "low" | "medium" | "high" | "full";
 
 // 대량 입력 한 줄. 프런트에서 `from,to,note` 형식 텍스트를 파싱한 결과.
 // from/to 는 선택적 — 둘 다 비면 무시. note 도 선택.
+// 정책(allow/deny)도 옵셔널. 누락 시 폼 레벨 정책 또는 "allow" 로 보정.
 export interface BulkRuleLine {
   from: string;
   to: string;
   note?: string;
+  policy?: FirewallPolicy;
 }

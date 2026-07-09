@@ -1,9 +1,13 @@
 import { spawn } from "child_process";
-import type { LogLevel, Rule, UfwStatus } from "@ufw-webui/shared";
+import type { FirewallPolicy, LogLevel, Rule, UfwStatus } from "@ufw-webui/shared";
 
 // exec() + 문자열 보간은 셸 메타문자에 취약하다 (예: from: "; cat /etc/passwd #").
 // execFile/spawn 은 인자 배열로 명령을 실행하므로 셸을 거치지 않고 안전.
 // Rule 의 from/to 도 별도 인자로 전달한다.
+
+// 정책 기본값. Rule.policy 가 없으면 이 값으로 동작 (하위호환).
+const DEFAULT_POLICY: FirewallPolicy = "allow";
+const resolvePolicy = (rule: Rule): FirewallPolicy => rule.policy ?? DEFAULT_POLICY;
 
 const executeUfw = (args: string[]): Promise<string> =>
   new Promise((resolve, reject) => {
@@ -50,9 +54,22 @@ export const getUfwStatus = async (): Promise<UfwStatus> => {
       continue;
     }
 
-    const [to, , from] = line.split(/\s{2,}/);
-    if (to && from) {
-      ufwStatus.rules.push({ to, from });
+    // ufw status:        [To, , , From]   (2 컬럼, 정책 없음)
+    // ufw status verbose: [To, Action, From] (3 컬럼, ALLOW/DENY 인식)
+    const parts = line.split(/\s{2,}/);
+    if (parts.length === 2) {
+      const [to, from] = parts;
+      if (to && from) {
+        ufwStatus.rules.push({ to, from, policy: DEFAULT_POLICY });
+      }
+    } else if (parts.length >= 3) {
+      const [to, actionToken, from] = parts;
+      if (to && from && actionToken) {
+        const inferred: FirewallPolicy = /^ALLOW/i.test(actionToken)
+          ? "allow"
+          : "deny";
+        ufwStatus.rules.push({ to, from, policy: inferred });
+      }
     }
   }
 
@@ -84,21 +101,21 @@ const ruleToArgs = (rule: Rule): string[] => {
 };
 
 export const addRule = async (rule: Rule) =>
-  executeUfw(["allow", ...ruleToArgs(rule)]);
+  executeUfw([resolvePolicy(rule), ...ruleToArgs(rule)]);
 
 export const deleteRule = async (rule: Rule) =>
-  executeUfw(["delete", "allow", ...ruleToArgs(rule)]);
+  executeUfw(["delete", resolvePolicy(rule), ...ruleToArgs(rule)]);
 
 // staged 라우터에서 사용할 표준 적용 진입점. action 에 따라 분기.
-//   "add"    → ufw allow ...
-//   "delete" → ufw delete allow ...
-//   "update" → ufw delete allow <old> + ufw allow <new> 순서.
+//   "add"    → ufw <policy> ...
+//   "delete" → ufw delete <policy> ...
+//   "update" → ufw delete <old.policy> <old> + ufw <new.policy> <new> 순서.
 //              (delete 먼저: 새 규칙이 잘못돼도 기존 SSH 차단이 풀린 채로 끝나지 않게 하기 위함)
 //              old 가 없으면 throw. old 와 new 가 동일하면 그대로 add (idempotent 변경).
 export const applyUfwOperation = (
   action: "add" | "delete" | "update",
   rule: Rule,
-  old?: { from: string; to: string },
+  old?: { from: string; to: string; policy?: FirewallPolicy },
 ): Promise<string> => {
   if (action === "delete") return deleteRule(rule);
   if (action === "add") return addRule(rule);
@@ -106,10 +123,12 @@ export const applyUfwOperation = (
   if (!old) {
     throw new Error("update 작업에는 old (원본 규칙) 가 필요합니다.");
   }
-  // from/to 가 같아도 old 가 명시적으로 제공되면 update 로 간주 — 한 번은 delete+add 진행.
-  // 사용자가 잘못 눌렀을 때의 안전망: old 와 new 가 완전히 같으면 "변경 없음" 으로 처리.
-  if (old.from === rule.from && old.to === rule.to) {
-    // idempotent: 그대로 반환
+  // 정책까지 같아야 "변경 없음". 정책만 바꾸는 케이스도 delete+add 시퀀스가 돌도록.
+  if (
+    old.from === rule.from &&
+    old.to === rule.to &&
+    (old.policy ?? DEFAULT_POLICY) === (rule.policy ?? DEFAULT_POLICY)
+  ) {
     return Promise.resolve("변경 없음");
   }
   return deleteRule(old).then(() => addRule(rule));

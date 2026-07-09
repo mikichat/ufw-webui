@@ -20,6 +20,7 @@ import {
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type {
+  FirewallPolicy,
   LogLevel,
   LogLine,
   Rule,
@@ -50,6 +51,7 @@ type RuleFormValues = {
   from?: string;
   to?: string;
   note?: string;
+  policy?: FirewallPolicy;
 };
 
 type AddMode = "apply-add" | "monitor-add" | "monitor-delete";
@@ -94,6 +96,7 @@ function UFWWebUI({ setIsLoggedIn }: { setIsLoggedIn: (isLoggedIn: boolean) => v
   const [ufwStatus, setUfwStatus] = useState<UfwStatus>({ active: false, rules: [] });
   const [stagedRules, setStagedRules] = useState<StagedRule[]>([]);
   const [addMode, setAddMode] = useState<AddMode>("apply-add");
+  const [addPolicy, setAddPolicy] = useState<FirewallPolicy>("allow");
   const [applyLoading, setApplyLoading] = useState(false);
   const [logLevel, setLogLevel] = useState<LogLevel>("off");
   const [logFile, setLogFile] = useState<string | null>(null);
@@ -220,6 +223,7 @@ function UFWWebUI({ setIsLoggedIn }: { setIsLoggedIn: (isLoggedIn: boolean) => v
     const normalizedRule: Rule = {
       from: (values.from ?? "").trim(),
       to: (values.to ?? "").trim(),
+      policy: values.policy ?? addPolicy,
     };
     const note = (values.note ?? "").trim() || undefined;
     const fromAnywhere =
@@ -241,16 +245,19 @@ function UFWWebUI({ setIsLoggedIn }: { setIsLoggedIn: (isLoggedIn: boolean) => v
         await apiAddRule(normalizedRule);
         message.success("규칙이 추가되었습니다.");
         form.resetFields();
+        setAddPolicy("allow");
         await fetchRules();
       } else if (addMode === "monitor-add") {
         await apiAddStaged({ ...normalizedRule, action: "add", note });
         message.success("대기 작업에 추가되었습니다. 검토 후 적용해 주세요.");
         form.resetFields();
+        setAddPolicy("allow");
         await fetchStaged();
       } else {
         await apiAddStaged({ ...normalizedRule, action: "delete", note });
         message.success("삭제 의도가 대기열에 추가되었습니다.");
         form.resetFields();
+        setAddPolicy("allow");
         await fetchStaged();
       }
     } catch (error) {
@@ -378,9 +385,36 @@ function UFWWebUI({ setIsLoggedIn }: { setIsLoggedIn: (isLoggedIn: boolean) => v
       },
     },
     {
+      title: "정책",
+      key: "policy",
+      width: 120,
+      render: (_value, record) => {
+        if (record.isAddRow) {
+          return (
+            <Radio.Group
+              value={addPolicy}
+              onChange={(e) => setAddPolicy(e.target.value as FirewallPolicy)}
+              optionType="button"
+              buttonStyle="solid"
+              size="small"
+            >
+              <Radio.Button value="allow">허용</Radio.Button>
+              <Radio.Button value="deny">차단</Radio.Button>
+            </Radio.Group>
+          );
+        }
+        const policy: FirewallPolicy = (record as Rule).policy ?? "allow";
+        return (
+          <Tag color={policy === "deny" ? "red" : "green"}>
+            {policy === "deny" ? "차단" : "허용"}
+          </Tag>
+        );
+      },
+    },
+    {
       title: "동작",
       key: "action",
-      width: 360,
+      width: 320,
       render: (_value, record) => {
         if (record.isAddRow) {
           return (
@@ -436,7 +470,8 @@ function UFWWebUI({ setIsLoggedIn }: { setIsLoggedIn: (isLoggedIn: boolean) => v
   const appliedData: TableRow[] = [
     ...ufwStatus.rules.map((rule) => ({
       ...rule,
-      key: `${rule.from}-${rule.to}`,
+      // 정책까지 key 에 포함해야, 같은 from/to 의 allow 와 deny 규칙이 한 행에 겹치지 않음.
+      key: `${rule.policy ?? "allow"}-${rule.from}-${rule.to}`,
     })),
     { key: "add-rule", isAddRow: true, from: "", to: "" },
   ];
@@ -450,9 +485,22 @@ function UFWWebUI({ setIsLoggedIn }: { setIsLoggedIn: (isLoggedIn: boolean) => v
       render: (action: StagedRule["action"]) =>
         action === "delete" ? (
           <Tag color="red">삭제</Tag>
+        ) : action === "update" ? (
+          <Tag color="blue">수정</Tag>
         ) : (
-          <Tag color="green">허용</Tag>
+          <Tag color="green">추가</Tag>
         ),
+    },
+    {
+      title: "정책",
+      dataIndex: "policy",
+      key: "policy",
+      width: 90,
+      render: (policy: FirewallPolicy | undefined) => (
+        <Tag color={(policy ?? "allow") === "deny" ? "red" : "green"}>
+          {(policy ?? "allow") === "deny" ? "차단" : "허용"}
+        </Tag>
+      ),
     },
     {
       title: "출발지",

@@ -105,8 +105,9 @@ router.post("/staged/apply-all", authenticateToken, async (_req, res) => {
         const message = error instanceof Error ? error.message : String(error);
         const verb =
           rule.action === "add" ? "추가" : rule.action === "delete" ? "삭제" : "수정";
+        const policyLabel = rule.policy === "deny" ? "차단" : "허용";
         errors.push(
-          `${verb} ${rule.old?.from || "모든 곳"} → ${rule.from || "모든 곳"}: ${message}`,
+          `${verb} ${policyLabel} ${rule.old?.from || "모든 곳"} → ${rule.from || "모든 곳"}: ${message}`,
         );
       }
     }

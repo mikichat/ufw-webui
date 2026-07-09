@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { randomUUID } from "crypto";
-import type { Rule, StagedRule } from "@ufw-webui/shared";
+import type { FirewallPolicy, Rule, StagedRule } from "@ufw-webui/shared";
 
 const dataDir = process.env.UFW_WEBUI_DATA_DIR
   ? path.resolve(process.env.UFW_WEBUI_DATA_DIR)
@@ -18,14 +18,25 @@ const isStagedRule = (v: unknown): v is StagedRule => {
   return typeof o.id === "string" && typeof o.from === "string" && typeof o.to === "string";
 };
 
-// 기존 파일 (action 필드 없음) 호환: 누락 시 "add" 로 보정.
+// 기존 파일 (action/policy 필드 없음) 호환: 누락 시 각각 "add" / "allow" 로 보정.
 const normalize = (raw: unknown[]): StagedRule[] => {
-  return raw
-    .filter(isStagedRule)
-    .map((rule) => ({
+  return raw.filter(isStagedRule).map((rule) => {
+    const policy = (rule.policy ?? "allow") as FirewallPolicy;
+    const old =
+      rule.old && typeof rule.old === "object"
+        ? {
+            from: rule.old.from,
+            to: rule.old.to,
+            policy: (rule.old.policy ?? "allow") as FirewallPolicy,
+          }
+        : undefined;
+    return {
       ...rule,
       action: rule.action ?? "add",
-    }));
+      policy,
+      ...(old ? { old } : {}),
+    };
+  });
 };
 
 const readStaged = (): StagedRule[] => {
@@ -49,7 +60,7 @@ export type AddStagedInput = Rule & {
   action?: "add" | "delete" | "update";
   note?: string;
   // action="update" 일 때만 필수. 교체 대상 원본 규칙.
-  old?: { from: string; to: string };
+  old?: { from: string; to: string; policy?: FirewallPolicy };
 };
 
 export const addStaged = async (input: AddStagedInput): Promise<StagedRule> => {
@@ -65,6 +76,7 @@ export const addStaged = async (input: AddStagedInput): Promise<StagedRule> => {
     action,
     from: (input.from ?? "").trim(),
     to: (input.to ?? "").trim(),
+    policy: (input.policy ?? "allow") as FirewallPolicy,
     note: input.note?.trim() || undefined,
     createdAt: Date.now(),
     old:
@@ -72,6 +84,7 @@ export const addStaged = async (input: AddStagedInput): Promise<StagedRule> => {
         ? {
             from: (input.old.from ?? "").trim(),
             to: (input.old.to ?? "").trim(),
+            policy: (input.old.policy ?? "allow") as FirewallPolicy,
           }
         : undefined,
   };

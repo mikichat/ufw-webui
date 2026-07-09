@@ -63,7 +63,7 @@ pnpm --filter @ufw-webui/web build          # tsc -b && vite build
 - `routes/bulk.ts` — **대량 추가** 1개 엔드포인트: `POST /api/ufw/bulk` (`{mode: "apply"|"monitor", action: "add"|"delete", rules: Rule[]}`). 부분 실패 시 `errors[]` 동봉. 모니터링 모드면 staging 큐에, 즉시 적용이면 UFW 에 직접.
 - `routes/logs.ts` — UFW 로깅 4개 엔드포인트: `GET/POST /logging` (레벨 토글), `GET /logs?limit=N` (최근 N 줄, file 또는 journal 출처), `GET /logs/stream` (SSE 실시간).
 - `services/authService.ts` — JWT (`jose`, HS256, 시크릿은 `process.env.UFW_WEBUI_JWT_SECRET` 사용, 미설정 시 WARNING + 기본값). 비밀번호는 **bcryptjs(cost 10)** 로 비교. 사용자는 `${UFW_WEBUI_DATA_DIR or cwd/data}/users.json` 에 JSON 배열로 저장. 첫 사용자는 `signupFirstUser` (bootstrap 전용) 으로만 등록.
-- `services/ufwService.ts` — `child_process.spawn("ufw", args)` 인자 배열 호출. `getUfwStatus` 는 `ufw status` 의 출력을 한 줄씩 파싱하고, 공백 2개 이상을 기준으로 컬럼을 분리하며, `(v6)` 이나 대시(`-`) 라인은 건너뜁니다. `ruleToArgs` 는 `{from, to}` 로부터 `["allow" | "delete", "from", ..., "to", ...]` 형태의 인자 배열을 만듭니다. `applyUfwOperation(action, rule, old?)` 은 `action: "add" | "delete" | "update"` 분기. update 는 `deleteRule(old) + addRule(new)` 시퀀스. 로깅 레벨 변경 (`setLogLevel`, `getCurrentLogLevel`) 도 같은 패턴.
+- `services/ufwService.ts` — `child_process.spawn("ufw", args)` 인자 배열 호출. `getUfwStatus` 는 `ufw status` 의 출력을 한 줄씩 파싱하고, 공백 2개 이상을 기준으로 컬럼을 분리하며, `(v6)` 이나 대시(`-`) 라인은 건너뜁니다. `ufw status verbose` 출력은 `To / Action / From` 3-토큰으로 와서 `ALLOW IN` / `DENY IN` 으로 정책까지 파싱합니다. `ruleToArgs` 는 `{from, to}` 로부터 `["from", ..., "to", ...]` 형태의 인자 배열을 만듭니다. `addRule` / `deleteRule` 은 `rule.policy ?? "allow"` 를 사용해 `ufw <policy> ...` / `ufw delete <policy> ...` 를 출력합니다. `applyUfwOperation(action, rule, old?)` 은 `action: "add" | "delete" | "update"` 분기. update 는 `deleteRule(old) + addRule(new)` 시퀀스. 정책까지 같으면 "변경 없음" 으로 조기 종료. 로깅 레벨 변경 (`setLogLevel`, `getCurrentLogLevel`) 도 같은 패턴.
 - `services/stagingService.ts` — `${DATA_DIR}/staged-rules.json` 에 작업 영속. `action: "add" | "delete" | "update"`, `note?`, `old?` 필드. `applyUfwOperation` 으로 분기 적용 (update 는 `old` 필수).
 - `services/logService.ts` — `detectLogSource` 로 `file`(`/var/log/ufw.log` 등) 또는 `journal`(`journalctl -k`) 출처 결정. `getRecentLines` 와 `createLogStream` 양쪽이 같은 파서 사용. rsyslog 가 없는 환경에서는 journal 출처로 자동 폴백.
 
@@ -122,7 +122,7 @@ type LogLevel = "off" | "low" | "medium" | "high" | "full";
 
 다음 제약은 현재 코드 그대로 남아 있으며, 무엇이든 변경할 때 중요합니다.
 
-- **`allow` 규칙만 지원.** `addRule` / `deleteRule` 은 항상 `ufw allow …` / `ufw delete allow …` 를 출력합니다. `deny` / `limit` / `reject` / `reject-with` / IPv6 는 지원하지 않습니다.
+- **`allow` / `deny` 정책 지원.** `Rule.policy` 는 옵셔널 필드 (`FirewallPolicy = "allow" | "deny"`). 누락 시 `"allow"` 로 보정됩니다. UFW 의 `ufw delete <policy> ...` 형식이 정책별 삭제를 지원하므로 `addRule` / `deleteRule` 양쪽이 정책을 그대로 사용합니다. `update` 는 정책 mismatch (allow ↔ deny) 를 거부 (400) — 정책 변경은 "삭제 + 추가" 두 단계로 안내. `limit` / `reject` / `reject-with` / IPv6 는 여전히 미지원.
 - **IPv4 전용 파싱.** `getUfwStatus` 는 `(v6)` 을 포함한 라인을 모두 건너뜁니다.
 - **rate-limit 은 in-memory.** 서버 재기동 시 카운터가 초기화됩니다. 다중 인스턴스 환경에서는 공유 스토어 (Redis 등) 가 필요합니다.
 - **staged 작업 race condition.** 다중 관리자가 같은 `DATA_DIR` 을 공유하면 락이 없어 동시 수정 시 손상 가능.
@@ -133,7 +133,7 @@ type LogLevel = "off" | "low" | "medium" | "high" | "full";
 
 ## 다음으로 할 만한 작업 (남은 항목)
 
-1. 규칙 모델 확장: `deny` / `limit` / `reject` / IPv6 / 포트·프로토콜 / 주석
+1. 규칙 모델 확장: `limit` / `reject` / `reject-with` / IPv6 / 포트·프로토콜 / 주석. (allow/deny 는 본 저장소에서 이미 지원)
 2. 동시 사용자 환경을 위한 락 (staged 작업 / users.json)
 3. TLS / reverse-proxy 자동화 (nginx config + certbot 연동)
 4. 감사 로그 / 실패 알림 (현재 `journalctl` 만 의존)

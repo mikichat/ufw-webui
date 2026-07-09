@@ -5,7 +5,7 @@ import {
   apiUpdateRule,
   type UpdateMode,
 } from "../services/api";
-import type { Rule } from "@ufw-webui/shared";
+import type { FirewallPolicy, Rule } from "@ufw-webui/shared";
 
 const { Text } = Typography;
 
@@ -22,6 +22,8 @@ type FormValues = {
   from: string;
   to: string;
   note?: string;
+  // 정책은 이 모달에서 변경하지 않는다. 표시용으로만 보관.
+  policy: FirewallPolicy;
 };
 
 const normalize = (s: string) => s.trim();
@@ -39,6 +41,7 @@ function RuleEditModal({ open, rule, onClose, onUpdated }: Props) {
         from: rule.from,
         to: rule.to,
         note: "",
+        policy: rule.policy ?? "allow",
       });
       setMode("apply");
     }
@@ -49,6 +52,7 @@ function RuleEditModal({ open, rule, onClose, onUpdated }: Props) {
     const values = await form.validateFields();
     const newFrom = normalize(values.from ?? "");
     const newTo = normalize(values.to ?? "");
+    const policy = values.policy;
 
     if (!newFrom && !newTo) {
       message.error("'출발지' 또는 '도착지' 필드 중 하나는 반드시 입력해야 합니다.");
@@ -59,8 +63,8 @@ function RuleEditModal({ open, rule, onClose, onUpdated }: Props) {
     setSubmitting(true);
     try {
       const res = await apiUpdateRule({
-        old: { from: rule.from, to: rule.to },
-        new: { from: newFrom, to: newTo },
+        old: { from: rule.from, to: rule.to, policy },
+        new: { from: newFrom, to: newTo, policy },
         mode,
         note: values.note?.trim() || undefined,
       });
@@ -88,6 +92,8 @@ function RuleEditModal({ open, rule, onClose, onUpdated }: Props) {
 
   const oldFrom = rule.from || "모든 곳";
   const oldTo = rule.to || "모든 곳";
+  const rulePolicy: FirewallPolicy = rule.policy ?? "allow";
+  const isDeny = rulePolicy === "deny";
 
   return (
     <Modal
@@ -114,11 +120,19 @@ function RuleEditModal({ open, rule, onClose, onUpdated }: Props) {
           }
         />
 
+        <Alert
+          type="warning"
+          showIcon
+          message="정책(허용/차단) 은 이 모달에서 변경할 수 없습니다"
+          description="정책을 바꾸려면 기존 규칙을 삭제한 뒤 새 정책으로 추가하세요."
+        />
+
         <div>
           <Text type="secondary" style={{ display: "block", marginBottom: 4 }}>
             원본 규칙
           </Text>
           <div style={{ padding: 8, background: "#fafafa", borderRadius: 4 }}>
+            <Tag color={isDeny ? "red" : "green"}>{isDeny ? "차단" : "허용"}</Tag>{" "}
             <Tag color="default">from</Tag> <strong>{oldFrom}</strong>{" "}
             <span style={{ margin: "0 4px" }}>→</span>{" "}
             <Tag color="default">to</Tag> <strong>{oldTo}</strong>
@@ -141,6 +155,9 @@ function RuleEditModal({ open, rule, onClose, onUpdated }: Props) {
         </div>
 
         <Form<FormValues> form={form} layout="vertical">
+          {/* 정책은 표시만. 변경 불가. */}
+          <Form.Item name="policy" hidden><Input /></Form.Item>
+
           <Form.Item
             name="from"
             label="새 출발지"

@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Alert, Input, Modal, Radio, Space, Tag, Typography, message } from "antd";
+import type { FirewallPolicy } from "@ufw-webui/shared";
 import type { BulkAction, BulkMode, BulkRequest } from "../services/api";
 import { apiBulkRules } from "../services/api";
 
@@ -61,6 +62,7 @@ function BulkRuleModal({ open, onClose, onApplied }: Props) {
   const [text, setText] = useState<string>(EXAMPLE_LINES.join("\n"));
   const [mode, setMode] = useState<BulkMode>("monitor");
   const [action, setAction] = useState<BulkAction>("add");
+  const [policy, setPolicy] = useState<FirewallPolicy>("allow");
   const [submitting, setSubmitting] = useState(false);
   const [lastResult, setLastResult] = useState<{
     applied: number;
@@ -85,6 +87,7 @@ function BulkRuleModal({ open, onClose, onApplied }: Props) {
           from: p.from,
           to: p.to,
           note: p.note || undefined,
+          policy,
         })),
       };
       const response = await apiBulkRules(body);
@@ -136,10 +139,26 @@ function BulkRuleModal({ open, onClose, onApplied }: Props) {
           description={
             <span>
               형식: <code>from,to,note</code>. 각 컬럼은 선택이지만 <code>from</code> 과 <code>to</code>{" "}
-              중 하나는 반드시 필요. <code>#</code> 로 시작하는 줄은 주석으로 무시.
+              중 하나는 반드시 필요. <code>#</code> 로 시작하는 줄은 주석으로 무시. 정책은 모달 상단에서
+              일괄 선택.
             </span>
           }
         />
+
+        <div>
+          <Text type="secondary" style={{ display: "block", marginBottom: 4 }}>
+            정책 (Policy)
+          </Text>
+          <Radio.Group
+            value={policy}
+            onChange={(e) => setPolicy(e.target.value as FirewallPolicy)}
+            optionType="button"
+            buttonStyle="solid"
+          >
+            <Radio.Button value="allow">허용 (allow)</Radio.Button>
+            <Radio.Button value="deny">차단 (deny)</Radio.Button>
+          </Radio.Group>
+        </div>
 
         <div>
           <Text type="secondary" style={{ display: "block", marginBottom: 4 }}>
@@ -151,8 +170,8 @@ function BulkRuleModal({ open, onClose, onApplied }: Props) {
             optionType="button"
             buttonStyle="solid"
           >
-            <Radio.Button value="add">추가 (allow)</Radio.Button>
-            <Radio.Button value="delete">삭제 (delete allow)</Radio.Button>
+            <Radio.Button value="add">추가</Radio.Button>
+            <Radio.Button value="delete">삭제</Radio.Button>
           </Radio.Group>
         </div>
 
@@ -199,6 +218,9 @@ function BulkRuleModal({ open, onClose, onApplied }: Props) {
             <ul style={{ marginTop: 8, marginBottom: 0, paddingLeft: 20 }}>
               {valid.slice(0, 5).map((p, i) => (
                 <li key={i} style={{ fontSize: 12, color: "#666" }}>
+                  <Tag color={policy === "deny" ? "red" : "green"}>
+                    {policy === "deny" ? "차단" : "허용"}
+                  </Tag>{" "}
                   {p.from || "모든 곳"} → {p.to || "모든 곳"}
                   {p.note ? ` — ${p.note}` : ""}
                 </li>

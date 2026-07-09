@@ -359,7 +359,7 @@ pnpm dev:server
 
 ### 대량 규칙
 
-- `POST /api/ufw/bulk` — N개 규칙을 한 번에 추가/모니터링
+- `POST /api/ufw/bulk` — N개 규칙을 한 번에 추가/모니터링. 정책(`allow` / `deny`) 도 모달 상단에서 일괄 선택.
 
 요청:
 
@@ -368,12 +368,14 @@ pnpm dev:server
   "mode": "apply",          // "apply" | "monitor"
   "action": "add",          // "add" | "delete"
   "rules": [
-    { "from": "10.0.0.0/8", "to": "22/tcp",  "note": "내부 SSH" },
-    { "to":   "443/tcp",                   "note": "모든 곳 HTTPS" },
+    { "from": "10.0.0.0/8", "to": "22/tcp",  "note": "내부 SSH", "policy": "allow" },
+    { "to":   "443/tcp",                   "note": "모든 곳 HTTPS", "policy": "deny" },
     { "from": "10.10.0.0/16", "to": "5432/tcp" }
   ]
 }
 ```
+
+`policy` 필드가 없거나 `"allow" | "deny"` 가 아니면 `"allow"` 로 보정됩니다 (하위호환).
 
 응답:
 
@@ -390,7 +392,7 @@ pnpm dev:server
 }
 ```
 
-부분 실패 정책: 한 건이 실패해도 나머지는 계속 진행. `errors[]` 에 어떤 규칙이 어떤 stderr 로 실패했는지 동봉. UI 의 "대량 추가" 모달에서 즉시 표시됨.
+부분 실패 정책: 한 건이 실패해도 나머지는 계속 진행. `errors[]` 에 어떤 규칙이 어떤 stderr 로 실패했는지 `[허용|차단] from → to: 메시지` 형식으로 동봉. UI 의 "대량 추가" 모달에서 즉시 표시됨.
 
 ### 규칙 수정 (변경)
 
@@ -488,8 +490,9 @@ sudo -E scripts/install-service.sh install
 | **UFW 로그 조회** | 최근 N 줄 (`GET /api/ufw/logs?limit=N`) + SSE 실시간 스트림 (`GET /api/ufw/logs/stream`). 4 초 폴링으로 UI 에서 실시간 표시 |
 | **journal 출처 폴백** | `rsyslog` 가 없는 환경 (`/var/log/ufw.log` 부재) 에서 `journalctl -k` / `-kf` 로 자동 폴백. 출처는 `source: "file" \| "journal" \| "none"` 로 응답에 포함 |
 | **첫 관리자 부트스트랩** | `POST /api/auth/bootstrap` — 사용자 파일이 비어 있을 때만 1회 성공. 그 외엔 403. UI: `apiUsersExist()` 로 폼 자동 분기 + 비밀번호 확인 |
-| **대량 규칙 추가** | `POST /api/ufw/bulk` — 한 줄 = `from,to,note` 형식의 텍스트를 N개 규칙으로 파싱. 동작 (추가/삭제) + 모드 (모니터링/즉시) 4 조합. 부분 실패 시 `errors[]` 동봉 |
-| **규칙 수정(변경)** | `POST /api/ufw/update` — UFW 가 `modify` 명령이 없는 점을 보완하기 위해 delete(old) + add(new) 시퀀스로 처리. 모니터링/즉시 모드 지원. 모니터링일 때 staged 에 `action: "update"` + `old: {from, to}` 로 저장, apply-all 시 add → update → delete 순서로 처리 |
+| **대량 규칙 추가** | `POST /api/ufw/bulk` — 한 줄 = `from,to,note` 형식의 텍스트를 N개 규칙으로 파싱. 정책 (허용/차단) + 동작 (추가/삭제) + 모드 (모니터링/즉시) 8 조합. 부분 실패 시 `errors[]` 동봉 |
+| **정책(allow/deny) 구분** | `Rule.policy` 옵셔널 필드. UFW 가 정책별 delete 를 지원하므로 add/delete 양쪽이 정책을 그대로 사용. 대량 추가 모달/단건 추가 폼/규칙 수정 모달/모니터링 큐/적용 결과에 정책 Tag 노출. 정책 mismatch update 는 400 으로 거부 |
+| **규칙 수정(변경)** | `POST /api/ufw/update` — UFW 가 `modify` 명령이 없는 점을 보완하기 위해 delete(old) + add(new) 시퀀스로 처리. 모니터링/즉시 모드 지원. 모니터링일 때 staged 에 `action: "update"` + `old: {from, to, policy?}` 로 저장, apply-all 시 add → update → delete 순서로 처리 |
 | **systemd 등록 스크립트** | `scripts/install-service.sh` — `install`/`uninstall`/`status` 서브커맨드. 유닛 파일 + 하드닝 옵션 + JWT env 박제 + 경고 출력 |
 
 ### 보안 강화
