@@ -1,9 +1,49 @@
+# ── 의존성 ─────────────────────────────────────────────────────────────
 node_modules
-build
-dist
-data
-apps/server/data
-apps/server/dist
-apps/server/public
 apps/*/node_modules
 packages/*/node_modules
+
+# ── 빌드 산출물 ────────────────────────────────────────────────────────
+dist
+build
+apps/*/dist
+apps/*/build
+apps/server/dist
+apps/server/public
+packages/*/dist
+packages/*/build
+
+# ── 런타임 데이터 (users.json, staged-rules.json 등) ───────────────────
+data
+apps/server/data
+apps/*/data
+
+# ── TypeScript build info ──────────────────────────────────────────────
+*.tsbuildinfo
+
+# ── 환경변수 (JWT 시크릿 등 민감 정보) ─────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── 에디터 / IDE ───────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+
+# ── OS 노이즈 ──────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── 로그 / 임시 파일 ───────────────────────────────────────────────────
+*.log
+*.tmp
+*.temp
+.cache/
+.parcel-cache/
+.eslintcache
