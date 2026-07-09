@@ -1,0 +1,16 @@
+{
+  "name": "ufw-webui",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Web UI for managing UFW",
+  "scripts": {
+    "build": "pnpm --filter @ufw-webui/web build && pnpm --filter @ufw-webui/server build",
+    "build:web": "pnpm --filter @ufw-webui/web build",
+    "build:server": "pnpm --filter @ufw-webui/server build",
+    "dev:web": "pnpm --filter @ufw-webui/web dev",
+    "dev:server": "pnpm --filter @ufw-webui/server dev",
+    "start": "pnpm --filter @ufw-webui/server start",
+    "dist": "pnpm build && bash ./dist.sh",
+    "dist:start": "node dist/dist/index.js"
+  }
+}

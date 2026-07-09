@@ -1,0 +1,9 @@
+node_modules
+build
+dist
+data
+apps/server/data
+apps/server/dist
+apps/server/public
+apps/*/node_modules
+packages/*/node_modules

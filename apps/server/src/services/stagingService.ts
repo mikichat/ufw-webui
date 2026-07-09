@@ -1,0 +1,89 @@
+import fs from "fs";
+import path from "path";
+import { randomUUID } from "crypto";
+import type { Rule, StagedRule } from "@ufw-webui/shared";
+
+const dataDir = process.env.UFW_WEBUI_DATA_DIR
+  ? path.resolve(process.env.UFW_WEBUI_DATA_DIR)
+  : path.resolve(process.cwd(), "data");
+const stagedFilePath = path.join(dataDir, "staged-rules.json");
+
+const ensureDataDir = () => {
+  fs.mkdirSync(dataDir, { recursive: true });
+};
+
+const isStagedRule = (v: unknown): v is StagedRule => {
+  if (!v || typeof v !== "object") return false;
+  const o = v as Record<string, unknown>;
+  return typeof o.id === "string" && typeof o.from === "string" && typeof o.to === "string";
+};
+
+// 기존 파일 (action 필드 없음) 호환: 누락 시 "add" 로 보정.
+const normalize = (raw: unknown[]): StagedRule[] => {
+  return raw
+    .filter(isStagedRule)
+    .map((rule) => ({
+      ...rule,
+      action: rule.action ?? "add",
+    }));
+};
+
+const readStaged = (): StagedRule[] => {
+  try {
+    const raw = fs.readFileSync(stagedFilePath, "utf8");
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? normalize(parsed) : [];
+  } catch (_error) {
+    return [];
+  }
+};
+
+const writeStaged = (staged: StagedRule[]) => {
+  ensureDataDir();
+  fs.writeFileSync(stagedFilePath, JSON.stringify(staged, null, 2), "utf8");
+};
+
+export const listStaged = async (): Promise<StagedRule[]> => readStaged();
+
+export type AddStagedInput = Rule & {
+  action?: "add" | "delete";
+  note?: string;
+};
+
+export const addStaged = async (input: AddStagedInput): Promise<StagedRule> => {
+  const staged = readStaged();
+  const next: StagedRule = {
+    id: randomUUID(),
+    action: input.action ?? "add",
+    from: (input.from ?? "").trim(),
+    to: (input.to ?? "").trim(),
+    note: input.note?.trim() || undefined,
+    createdAt: Date.now(),
+  };
+  staged.push(next);
+  writeStaged(staged);
+  return next;
+};
+
+export const removeStaged = async (id: string): Promise<void> => {
+  const staged = readStaged();
+  const filtered = staged.filter((rule) => rule.id !== id);
+  if (filtered.length === staged.length) {
+    throw new Error(`대기 규칙을 찾을 수 없습니다: ${id}`);
+  }
+  writeStaged(filtered);
+};
+
+export const clearStaged = async (): Promise<void> => {
+  writeStaged([]);
+};
+
+// 부분 적용 후 성공한 항목만 제거한 새 목록을 저장한다.
+export const replaceStaged = async (next: StagedRule[]): Promise<void> => {
+  writeStaged(next);
+};
+
+export const findStaged = async (id: string): Promise<StagedRule | undefined> => {
+  const staged = readStaged();
+  return staged.find((rule) => rule.id === id);
+};
