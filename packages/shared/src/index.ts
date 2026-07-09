@@ -35,3 +35,11 @@ export interface LogLine {
 }
 
 export type LogLevel = "off" | "low" | "medium" | "high" | "full";
+
+// 대량 입력 한 줄. 프런트에서 `from,to,note` 형식 텍스트를 파싱한 결과.
+// from/to 는 선택적 — 둘 다 비면 무시. note 도 선택.
+export interface BulkRuleLine {
+  from: string;
+  to: string;
+  note?: string;
+}

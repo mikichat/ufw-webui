@@ -7,6 +7,7 @@ import { authRouter } from "./routes/auth";
 import ufwRoutes from "./routes/ufw";
 import stagedRoutes from "./routes/staged";
 import logsRoutes from "./routes/logs";
+import bulkRoutes from "./routes/bulk";
 
 const app = express();
 
@@ -41,6 +42,7 @@ app.use("/api/auth", authRouter);
 app.use("/api/ufw", ufwRoutes);
 app.use("/api/ufw", stagedRoutes);
 app.use("/api/ufw", logsRoutes);
+app.use("/api/ufw", bulkRoutes);
 
 app.get("*", (_req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "index.html"));

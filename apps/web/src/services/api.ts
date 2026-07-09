@@ -1,5 +1,5 @@
 import axios from "axios";
-import type { LogLevel, Rule } from "@ufw-webui/shared";
+import type { BulkRuleLine, LogLevel, Rule } from "@ufw-webui/shared";
 import type { InternalAxiosRequestConfig } from "axios";
 
 const api = axios.create({
@@ -93,3 +93,25 @@ export const apiSetLogLevel = (level: LogLevel) =>
 
 export const apiGetRecentLogs = (limit: number) =>
   api.get(`/ufw/logs?limit=${limit}`);
+
+// ── 대량 규칙 ──────────────────────────────────────────────────────────
+
+export type BulkMode = "apply" | "monitor";
+export type BulkAction = "add" | "delete";
+
+export type BulkRequest = {
+  mode: BulkMode;
+  action: BulkAction;
+  rules: BulkRuleLine[];
+};
+
+export type BulkResponse = {
+  mode: BulkMode;
+  action: BulkAction;
+  applied: number;
+  total: number;
+  errors?: string[];
+};
+
+export const apiBulkRules = (req: BulkRequest) =>
+  api.post<{ success: true; data: BulkResponse }>("/ufw/bulk", req);

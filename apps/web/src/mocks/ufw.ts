@@ -200,6 +200,79 @@ Mock.mock(RegExp("^/api/ufw/logs(\\?.*)?$"), "get", (options: MockRequest) => {
   return { success: true, data: { file: "/var/log/ufw.log", lines } };
 });
 
+// ── 대량 규칙 ─────────────────────────────────────────────────────────
+
+type BulkBody = {
+  mode: "apply" | "monitor";
+  action: "add" | "delete";
+  rules: { from: string; to: string; note?: string }[];
+};
+
+const generateBulkId = () =>
+  typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `mock-bulk-${Math.random().toString(36).slice(2, 10)}`;
+
+Mock.mock("/api/ufw/bulk", "post", (options: MockRequest) => {
+  const body = JSON.parse(options.body) as BulkBody;
+  const mode = body.mode === "monitor" ? "monitor" : "apply";
+  const action = body.action === "delete" ? "delete" : "add";
+  const rules = Array.isArray(body.rules) ? body.rules : [];
+
+  let applied = 0;
+  const errors: string[] = [];
+
+  for (const raw of rules) {
+    const from = (raw.from ?? "").trim();
+    const to = (raw.to ?? "").trim();
+    if (!from && !to) {
+      errors.push(`from 또는 to 중 하나는 필요합니다: from='${from}' to='${to}'`);
+      continue;
+    }
+    if (mode === "monitor") {
+      stagedRules = [
+        ...stagedRules,
+        {
+          id: generateBulkId(),
+          action,
+          from,
+          to,
+          note: raw.note?.trim() || undefined,
+          createdAt: Date.now(),
+        },
+      ];
+      applied += 1;
+    } else {
+      try {
+        if (action === "delete") {
+          ufwStatus = {
+            ...ufwStatus,
+            rules: ufwStatus.rules.filter(
+              (r) => !(r.from === from && r.to === to),
+            ),
+          };
+        } else {
+          ufwStatus = { ...ufwStatus, rules: [...ufwStatus.rules, { from, to }] };
+        }
+        applied += 1;
+      } catch (error) {
+        errors.push(`${from || "모든 곳"} → ${to || "모든 곳"}: ${String(error)}`);
+      }
+    }
+  }
+
+  return {
+    success: true,
+    data: {
+      mode,
+      action,
+      applied,
+      total: rules.length,
+      errors: errors.length > 0 ? errors : undefined,
+    },
+  };
+});
+
 // SSE 스트림은 mock 환경에서 단순 polling 흉내도 가능하지만, axios + EventSource
 // 의존성 차이 때문에 mock 인터셉트 대신 EventSource 가 받을 수 있도록 fetch 기반
 // 응답은 어렵다. UI 측에서 /api/ufw/logs?limit=N 폴링으로 폴백하도록 둔다.

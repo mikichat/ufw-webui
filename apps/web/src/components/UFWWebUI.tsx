@@ -41,6 +41,7 @@ import {
   apiRemoveStaged,
   apiSetLogLevel,
 } from "../services/api";
+import BulkRuleModal from "./BulkRuleModal";
 
 const { Title, Text } = Typography;
 
@@ -99,6 +100,7 @@ function UFWWebUI({ setIsLoggedIn }: { setIsLoggedIn: (isLoggedIn: boolean) => v
   const [logs, setLogs] = useState<LogLine[]>([]);
   const [logFilter, setLogFilter] = useState<"all" | "BLOCK" | "ALLOW">("all");
   const [logPaused, setLogPaused] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
   const [form] = Form.useForm<RuleFormValues>();
   const navigate = useNavigate();
   const logTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -333,6 +335,11 @@ function UFWWebUI({ setIsLoggedIn }: { setIsLoggedIn: (isLoggedIn: boolean) => v
     localStorage.removeItem("token");
     setIsLoggedIn(false);
     navigate("/login");
+  };
+
+  const onBulkApplied = async () => {
+    // 모니터링 모드/즉시 적용 모드 모두 staged + applied 모두 새로 가져옴
+    await refreshAll();
   };
 
   // ── 테이블 정의 ─────────────────────────────────────────────────────────
@@ -637,8 +644,16 @@ function UFWWebUI({ setIsLoggedIn }: { setIsLoggedIn: (isLoggedIn: boolean) => v
         </Badge>
       </div>
 
-      <div style={{ display: "flex" }}>
-        <Button type="link" onClick={logout} style={{ marginLeft: "auto", marginRight: "20px" }}>
+      <div style={{ display: "flex", alignItems: "center" }}>
+        <Button
+          type="primary"
+          ghost
+          onClick={() => setBulkOpen(true)}
+          style={{ marginLeft: "auto" }}
+        >
+          + 대량 추가
+        </Button>
+        <Button type="link" onClick={logout} style={{ marginRight: "20px" }}>
           로그아웃
         </Button>
       </div>
@@ -706,6 +721,12 @@ function UFWWebUI({ setIsLoggedIn }: { setIsLoggedIn: (isLoggedIn: boolean) => v
           pagination={false}
         />
       </Form>
+
+      <BulkRuleModal
+        open={bulkOpen}
+        onClose={() => setBulkOpen(false)}
+        onApplied={onBulkApplied}
+      />
     </div>
   );
 }
