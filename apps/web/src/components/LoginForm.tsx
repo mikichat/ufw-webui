@@ -14,10 +14,21 @@ type FormValues = {
   confirm?: string;
 };
 
+const isRateLimited = (err: unknown): { retryAfter: number } | null => {
+  if (err && typeof err === "object" && "status" in err && "retryAfter" in err) {
+    const e = err as { status?: number; retryAfter?: number };
+    if (e.status === 429 && typeof e.retryAfter === "number") {
+      return { retryAfter: e.retryAfter };
+    }
+  }
+  return null;
+};
+
 function LoginForm({ setIsLoggedIn }: { setIsLoggedIn: (isLoggedIn: boolean) => void }) {
   const [loading, setLoading] = useState(false);
   const [bootstrapping, setBootstrapping] = useState(true);
   const [bootstrapMode, setBootstrapMode] = useState(false);
+  const [cooldown, setCooldown] = useState<number>(0);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -42,6 +53,13 @@ function LoginForm({ setIsLoggedIn }: { setIsLoggedIn: (isLoggedIn: boolean) => 
     };
   }, []);
 
+  // 쿨다운 카운트다운. 0 이 되면 버튼 다시 활성화.
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = setTimeout(() => setCooldown((c) => Math.max(0, c - 1)), 1000);
+    return () => clearTimeout(timer);
+  }, [cooldown]);
+
   const handleAuthSuccess = (data: AuthSuccess) => {
     if (data.token) {
       localStorage.setItem("token", data.token);
@@ -53,20 +71,35 @@ function LoginForm({ setIsLoggedIn }: { setIsLoggedIn: (isLoggedIn: boolean) => 
     }
   };
 
+  const handleAuthError = (error: unknown) => {
+    const limited = isRateLimited(error);
+    if (limited) {
+      setCooldown(limited.retryAfter);
+      message.error(
+        `너무 많은 시도가 감지되었습니다. ${limited.retryAfter}초 후에 다시 시도해 주세요.`,
+        limited.retryAfter,
+      );
+      return;
+    }
+    const m = error instanceof Error ? error.message : "Authentication failed.";
+    message.error(m);
+  };
+
   const handleLogin = async (values: FormValues) => {
+    if (cooldown > 0) return;
     setLoading(true);
     try {
       const res = await apiAuth(values.username, values.password);
       handleAuthSuccess(res.data.data);
     } catch (error) {
-      const m = error instanceof Error ? error.message : "Authentication failed.";
-      message.error(m);
+      handleAuthError(error);
     } finally {
       setLoading(false);
     }
   };
 
   const handleBootstrap = async (values: FormValues) => {
+    if (cooldown > 0) return;
     if (values.password !== values.confirm) {
       message.error("비밀번호와 비밀번호 확인이 일치하지 않습니다.");
       return;
@@ -76,8 +109,7 @@ function LoginForm({ setIsLoggedIn }: { setIsLoggedIn: (isLoggedIn: boolean) => 
       const res = await apiBootstrapFirst(values.username, values.password);
       handleAuthSuccess(res.data.data);
     } catch (error) {
-      const m = error instanceof Error ? error.message : "Bootstrap failed.";
-      message.error(m);
+      handleAuthError(error);
     } finally {
       setLoading(false);
     }
@@ -98,6 +130,8 @@ function LoginForm({ setIsLoggedIn }: { setIsLoggedIn: (isLoggedIn: boolean) => 
       </div>
     );
   }
+
+  const disabled = loading || cooldown > 0;
 
   return (
     <div
@@ -132,8 +166,19 @@ function LoginForm({ setIsLoggedIn }: { setIsLoggedIn: (isLoggedIn: boolean) => 
           />
         )}
 
+        {cooldown > 0 && (
+          <Alert
+            type="warning"
+            showIcon
+            style={{ marginBottom: 16 }}
+            message={`잠시 후 다시 시도해 주세요 (${cooldown}초)`}
+            description="너무 많은 시도가 감지되어 일시적으로 차단되었습니다. 카운트다운이 끝나면 다시 시도할 수 있습니다."
+          />
+        )}
+
         <Form<FormValues>
           onFinish={bootstrapMode ? handleBootstrap : handleLogin}
+          disabled={cooldown > 0}
         >
           <Form.Item
             name="username"
@@ -179,9 +224,14 @@ function LoginForm({ setIsLoggedIn }: { setIsLoggedIn: (isLoggedIn: boolean) => 
             type="primary"
             htmlType="submit"
             loading={loading}
+            disabled={disabled}
             style={{ width: "100%" }}
           >
-            {bootstrapMode ? "관리자 등록" : "로그인"}
+            {cooldown > 0
+              ? `대기 중 (${cooldown}초)`
+              : bootstrapMode
+                ? "관리자 등록"
+                : "로그인"}
           </Button>
         </Form>
       </div>

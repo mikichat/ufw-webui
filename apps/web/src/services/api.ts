@@ -19,6 +19,7 @@ api.interceptors.request.use(
 
 // 응답 본문이 { success: false, error } 인 경우 axios 가 잡을 수 있도록 reject.
 // 실제 백엔드(4xx/5xx)와 mockjs(200 + success:false) 모두 일관되게 catch 로 흐르게 한다.
+// 429 의 경우 retryAfter 를 Error 객체에 첨부해 UI 가 카운트다운을 표시할 수 있게 한다.
 api.interceptors.response.use(
   (response) => {
     if (
@@ -31,7 +32,21 @@ api.interceptors.response.use(
     }
     return response;
   },
-  (error) => Promise.reject(error),
+  (error) => {
+    if (error?.response?.status === 429) {
+      const body = error.response.data as { error?: string; retryAfter?: number } | undefined;
+      const msg = body?.error ?? "너무 많은 요청. 잠시 후 다시 시도하세요.";
+      const retryAfter = typeof body?.retryAfter === "number" ? body.retryAfter : undefined;
+      const err = new Error(retryAfter ? `${msg} (${retryAfter}초 대기)` : msg) as Error & {
+        status?: number;
+        retryAfter?: number;
+      };
+      err.status = 429;
+      err.retryAfter = retryAfter;
+      return Promise.reject(err);
+    }
+    return Promise.reject(error);
+  },
 );
 
 // ── 인증 ────────────────────────────────────────────────────────────────
@@ -115,3 +130,30 @@ export type BulkResponse = {
 
 export const apiBulkRules = (req: BulkRequest) =>
   api.post<{ success: true; data: BulkResponse }>("/ufw/bulk", req);
+
+// ── 규칙 수정 (delete + add 시퀀스) ──────────────────────────────────
+
+export type UpdateMode = "apply" | "monitor";
+
+export type UpdateRequest = {
+  old: Rule;
+  new: Rule;
+  mode: UpdateMode;
+  note?: string;
+};
+
+export type UpdateResponse =
+  | {
+      mode: "monitor";
+      staged: number;
+      message: string;
+      rule: unknown;
+    }
+  | {
+      mode: "apply";
+      applied: number;
+      result: string;
+    };
+
+export const apiUpdateRule = (req: UpdateRequest) =>
+  api.post<{ success: true; data: UpdateResponse }>("/ufw/update", req);

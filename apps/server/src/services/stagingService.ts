@@ -46,19 +46,34 @@ const writeStaged = (staged: StagedRule[]) => {
 export const listStaged = async (): Promise<StagedRule[]> => readStaged();
 
 export type AddStagedInput = Rule & {
-  action?: "add" | "delete";
+  action?: "add" | "delete" | "update";
   note?: string;
+  // action="update" 일 때만 필수. 교체 대상 원본 규칙.
+  old?: { from: string; to: string };
 };
 
 export const addStaged = async (input: AddStagedInput): Promise<StagedRule> => {
   const staged = readStaged();
+  const action = input.action ?? "add";
+
+  if (action === "update" && !input.old) {
+    throw new Error("update 작업에는 old (원본 규칙) 가 필요합니다.");
+  }
+
   const next: StagedRule = {
     id: randomUUID(),
-    action: input.action ?? "add",
+    action,
     from: (input.from ?? "").trim(),
     to: (input.to ?? "").trim(),
     note: input.note?.trim() || undefined,
     createdAt: Date.now(),
+    old:
+      action === "update" && input.old
+        ? {
+            from: (input.old.from ?? "").trim(),
+            to: (input.old.to ?? "").trim(),
+          }
+        : undefined,
   };
   staged.push(next);
   writeStaged(staged);

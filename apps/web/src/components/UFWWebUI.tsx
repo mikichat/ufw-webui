@@ -42,6 +42,7 @@ import {
   apiSetLogLevel,
 } from "../services/api";
 import BulkRuleModal from "./BulkRuleModal";
+import RuleEditModal from "./RuleEditModal";
 
 const { Title, Text } = Typography;
 
@@ -101,6 +102,7 @@ function UFWWebUI({ setIsLoggedIn }: { setIsLoggedIn: (isLoggedIn: boolean) => v
   const [logFilter, setLogFilter] = useState<"all" | "BLOCK" | "ALLOW">("all");
   const [logPaused, setLogPaused] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<Rule | null>(null);
   const [form] = Form.useForm<RuleFormValues>();
   const navigate = useNavigate();
   const logTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -413,14 +415,19 @@ function UFWWebUI({ setIsLoggedIn }: { setIsLoggedIn: (isLoggedIn: boolean) => v
         }
 
         return (
-          <Popconfirm
-            title="이 규칙을 즉시 삭제하시겠습니까?"
-            onConfirm={() => deleteRule(record)}
-            okText="삭제"
-            cancelText="취소"
-          >
-            <Button danger size="small">즉시 삭제</Button>
-          </Popconfirm>
+          <Space>
+            <Button size="small" onClick={() => setEditTarget(record)}>
+              수정
+            </Button>
+            <Popconfirm
+              title="이 규칙을 즉시 삭제하시겠습니까?"
+              onConfirm={() => deleteRule(record)}
+              okText="삭제"
+              cancelText="취소"
+            >
+              <Button danger size="small">즉시 삭제</Button>
+            </Popconfirm>
+          </Space>
         );
       },
     },
@@ -726,6 +733,13 @@ function UFWWebUI({ setIsLoggedIn }: { setIsLoggedIn: (isLoggedIn: boolean) => v
         open={bulkOpen}
         onClose={() => setBulkOpen(false)}
         onApplied={onBulkApplied}
+      />
+
+      <RuleEditModal
+        open={editTarget !== null}
+        rule={editTarget}
+        onClose={() => setEditTarget(null)}
+        onUpdated={refreshAll}
       />
     </div>
   );

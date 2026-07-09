@@ -89,9 +89,31 @@ export const addRule = async (rule: Rule) =>
 export const deleteRule = async (rule: Rule) =>
   executeUfw(["delete", "allow", ...ruleToArgs(rule)]);
 
-// staged 라우터에서 사용할 표준 적용 진입점. action 에 따라 add/delete 분기.
-export const applyUfwOperation = (action: "add" | "delete", rule: Rule) =>
-  action === "delete" ? deleteRule(rule) : addRule(rule);
+// staged 라우터에서 사용할 표준 적용 진입점. action 에 따라 분기.
+//   "add"    → ufw allow ...
+//   "delete" → ufw delete allow ...
+//   "update" → ufw delete allow <old> + ufw allow <new> 순서.
+//              (delete 먼저: 새 규칙이 잘못돼도 기존 SSH 차단이 풀린 채로 끝나지 않게 하기 위함)
+//              old 가 없으면 throw. old 와 new 가 동일하면 그대로 add (idempotent 변경).
+export const applyUfwOperation = (
+  action: "add" | "delete" | "update",
+  rule: Rule,
+  old?: { from: string; to: string },
+): Promise<string> => {
+  if (action === "delete") return deleteRule(rule);
+  if (action === "add") return addRule(rule);
+  // update
+  if (!old) {
+    throw new Error("update 작업에는 old (원본 규칙) 가 필요합니다.");
+  }
+  // from/to 가 같아도 old 가 명시적으로 제공되면 update 로 간주 — 한 번은 delete+add 진행.
+  // 사용자가 잘못 눌렀을 때의 안전망: old 와 new 가 완전히 같으면 "변경 없음" 으로 처리.
+  if (old.from === rule.from && old.to === rule.to) {
+    // idempotent: 그대로 반환
+    return Promise.resolve("변경 없음");
+  }
+  return deleteRule(old).then(() => addRule(rule));
+};
 
 // UFW logging 레벨 변경. off | low | medium | high | full 만 허용.
 const ALLOWED_LOG_LEVELS: LogLevel[] = ["off", "low", "medium", "high", "full"];

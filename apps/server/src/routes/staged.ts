@@ -70,7 +70,7 @@ router.post("/staged/:id/apply", authenticateToken, async (req, res) => {
     if (!target) {
       throw new Error(`대기 작업을 찾을 수 없습니다: ${id}`);
     }
-    await applyUfwOperation(target.action, target);
+    await applyUfwOperation(target.action, target, target.old);
     await removeStaged(id);
     res.json({ success: true, data: { id } });
   } catch (error) {
@@ -85,7 +85,11 @@ router.post("/staged/:id/apply", authenticateToken, async (req, res) => {
 router.post("/staged/apply-all", authenticateToken, async (_req, res) => {
   try {
     const staged = await listStaged();
-    const order = (a: { action: "add" | "delete" }) => (a.action === "add" ? 0 : 1);
+    const order = (a: { action: "add" | "delete" | "update" }) => {
+      if (a.action === "add") return 0;
+      if (a.action === "update") return 1;
+      return 2; // delete
+    };
     const sorted = [...staged].sort((a, b) => order(a) - order(b));
 
     let applied = 0;
@@ -94,13 +98,15 @@ router.post("/staged/apply-all", authenticateToken, async (_req, res) => {
 
     for (const rule of sorted) {
       try {
-        await applyUfwOperation(rule.action, rule);
+        await applyUfwOperation(rule.action, rule, rule.old);
         applied += 1;
         appliedIds.push(rule.id);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
+        const verb =
+          rule.action === "add" ? "추가" : rule.action === "delete" ? "삭제" : "수정";
         errors.push(
-          `${rule.action === "add" ? "추가" : "삭제"} ${rule.from || "모든 곳"} → ${rule.to || "모든 곳"}: ${message}`,
+          `${verb} ${rule.old?.from || "모든 곳"} → ${rule.from || "모든 곳"}: ${message}`,
         );
       }
     }

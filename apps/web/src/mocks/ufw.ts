@@ -276,3 +276,71 @@ Mock.mock("/api/ufw/bulk", "post", (options: MockRequest) => {
 // SSE 스트림은 mock 환경에서 단순 polling 흉내도 가능하지만, axios + EventSource
 // 의존성 차이 때문에 mock 인터셉트 대신 EventSource 가 받을 수 있도록 fetch 기반
 // 응답은 어렵다. UI 측에서 /api/ufw/logs?limit=N 폴링으로 폴백하도록 둔다.
+
+// ── 규칙 수정 (delete + add) ─────────────────────────────────────────
+
+type UpdateBody = {
+  old: { from: string; to: string };
+  new: { from: string; to: string };
+  mode: "apply" | "monitor";
+  note?: string;
+};
+
+Mock.mock("/api/ufw/update", "post", (options: MockRequest) => {
+  const body = JSON.parse(options.body) as UpdateBody;
+  const oldFrom = (body.old.from ?? "").trim();
+  const oldTo = (body.old.to ?? "").trim();
+  const newFrom = (body.new.from ?? "").trim();
+  const newTo = (body.new.to ?? "").trim();
+  const mode = body.mode === "monitor" ? "monitor" : "apply";
+
+  if (!oldFrom && !oldTo) {
+    return { success: false, error: "old 의 from 또는 to 중 하나는 필요합니다." };
+  }
+  if (!newFrom && !newTo) {
+    return { success: false, error: "new 의 from 또는 to 중 하나는 필요합니다." };
+  }
+
+  if (mode === "monitor") {
+    stagedRules = [
+      ...stagedRules,
+      {
+        id: generateBulkId(),
+        action: "update" as const,
+        from: newFrom,
+        to: newTo,
+        note: body.note?.trim() || undefined,
+        createdAt: Date.now(),
+        old: { from: oldFrom, to: oldTo },
+      },
+    ];
+    return {
+      success: true,
+      data: {
+        mode,
+        staged: 1,
+        message: "대기열에 변경 작업이 추가되었습니다.",
+        rule: stagedRules[stagedRules.length - 1],
+      },
+    };
+  }
+
+  // apply: delete(old) + add(new)
+  if (oldFrom !== newFrom || oldTo !== newTo) {
+    ufwStatus = {
+      ...ufwStatus,
+      rules: ufwStatus.rules.filter(
+        (r) => !(r.from === oldFrom && r.to === oldTo),
+      ),
+    };
+    ufwStatus = { ...ufwStatus, rules: [...ufwStatus.rules, { from: newFrom, to: newTo }] };
+  }
+  return {
+    success: true,
+    data: {
+      mode,
+      applied: 1,
+      result: oldFrom === newFrom && oldTo === newTo ? "변경 없음" : "Rule updated",
+    },
+  };
+});
