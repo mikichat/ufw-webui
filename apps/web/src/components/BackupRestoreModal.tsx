@@ -10,6 +10,7 @@ import {
   Tag,
   Typography,
   message,
+  theme,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import {
@@ -20,8 +21,18 @@ import {
   type BackupListEntry,
   type RestoreResponse,
 } from "../services/api";
+import { Mono } from "../theme/Mono";
+import { monoStyle } from "../theme/tokens";
 
 const { Text, Paragraph } = Typography;
+
+const tagLabelStyle: React.CSSProperties = {
+  fontFamily: monoStyle.fontFamily,
+  fontSize: 11,
+  letterSpacing: "0.08em",
+  fontWeight: 600,
+  margin: 0,
+};
 
 type Props = {
   open: boolean;
@@ -44,6 +55,7 @@ const formatCreatedAt = (ts: number): string => {
 };
 
 function BackupRestoreModal({ open, onClose, onChanged }: Props) {
+  const { token } = theme.useToken();
   const [tab, setTab] = useState<"download" | "restore">("download");
   const [backups, setBackups] = useState<BackupListEntry[]>([]);
   const [backupsLoading, setBackupsLoading] = useState(false);
@@ -138,7 +150,7 @@ function BackupRestoreModal({ open, onClose, onChanged }: Props) {
       dataIndex: "filename",
       key: "filename",
       ellipsis: true,
-      render: (text: string) => <Text code>{text}</Text>,
+      render: (text: string) => <Mono style={{ fontSize: 12 }}>{text}</Mono>,
     },
     {
       title: "종류",
@@ -147,9 +159,9 @@ function BackupRestoreModal({ open, onClose, onChanged }: Props) {
       width: 110,
       render: (kind: BackupListEntry["kind"]) =>
         kind === "pre-restore" ? (
-          <Tag color="orange">자동 (사전 백업)</Tag>
+          <Tag color="orange" style={tagLabelStyle}>AUTO</Tag>
         ) : (
-          <Tag color="blue">수동</Tag>
+          <Tag color="blue" style={tagLabelStyle}>MANUAL</Tag>
         ),
     },
     {
@@ -157,14 +169,18 @@ function BackupRestoreModal({ open, onClose, onChanged }: Props) {
       dataIndex: "sizeBytes",
       key: "sizeBytes",
       width: 100,
-      render: (n: number) => formatBytes(n),
+      render: (n: number) => <Mono style={{ fontSize: 12 }}>{formatBytes(n)}</Mono>,
     },
     {
       title: "생성 시각",
       dataIndex: "createdAt",
       key: "createdAt",
       width: 170,
-      render: (ts: number) => formatCreatedAt(ts),
+      render: (ts: number) => (
+        <Mono style={{ fontSize: 12, color: token.colorTextSecondary }}>
+          {formatCreatedAt(ts)}
+        </Mono>
+      ),
     },
     {
       title: "",
@@ -301,7 +317,7 @@ function BackupRestoreModal({ open, onClose, onChanged }: Props) {
                         <div>
                           복원된 파일:{" "}
                           {lastResult.restored.map((n) => (
-                            <Tag color="green" key={n}>
+                            <Tag color="green" style={tagLabelStyle} key={n}>
                               {n}
                             </Tag>
                           ))}
@@ -309,15 +325,18 @@ function BackupRestoreModal({ open, onClose, onChanged }: Props) {
                         <div>
                           ufw reload:{" "}
                           {lastResult.reloaded ? (
-                            <Tag color="green">성공</Tag>
+                            <Tag color="green" style={tagLabelStyle}>OK</Tag>
                           ) : (
-                            <Tag color="red">실패</Tag>
+                            <Tag color="red" style={tagLabelStyle}>FAIL</Tag>
                           )}
                         </div>
                         {lastResult.warnings.length > 0 && (
                           <ul style={{ marginBottom: 0, paddingLeft: 20 }}>
                             {lastResult.warnings.map((w, i) => (
-                              <li key={i} style={{ fontSize: 12, color: "#666" }}>
+                              <li
+                                key={i}
+                                style={{ fontSize: 12, color: token.colorTextSecondary, fontFamily: monoStyle.fontFamily }}
+                              >
                                 {w}
                               </li>
                             ))}

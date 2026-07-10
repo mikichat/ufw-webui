@@ -3,7 +3,30 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>UFW WebUI - 방화벽 관리 콘솔</title>
+    <title>UFW WebUI — 방화벽 관리 콘솔</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+    />
+    <script>
+      // FOUC 방지: React 가 마운트되기 전에 다크 테마면 <html data-theme="dark"> 부트스트랩.
+      // useColorScheme 의 readStoredMode 와 동일한 키/값 규약.
+      (function () {
+        try {
+          var mode = localStorage.getItem("ufw-color-scheme");
+          if (mode !== "light" && mode !== "dark") {
+            mode = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+          } else if (mode === "system") {
+            mode = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+          }
+          if (mode === "dark") document.documentElement.dataset.theme = "dark";
+        } catch (_e) {
+          // ignore — SSR / 비공개 모드 등
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -1,15 +1,25 @@
 import { useEffect, useState } from "react";
-import { Alert, Form, Input, Modal, Radio, Space, Tag, Typography, message } from "antd";
+import { Alert, Form, Input, Modal, Radio, Space, Tag, Typography, message, theme } from "antd";
 import { useNavigate } from "react-router-dom";
 import {
   apiUpdateRule,
   type UpdateMode,
 } from "../services/api";
 import type { FirewallPolicy, Rule } from "@ufw-webui/shared";
+import { Mono } from "../theme/Mono";
+import { monoStyle } from "../theme/tokens";
 
 const { Text } = Typography;
 
 const { TextArea } = Input;
+
+const tagLabelStyle: React.CSSProperties = {
+  fontFamily: monoStyle.fontFamily,
+  fontSize: 11,
+  letterSpacing: "0.08em",
+  fontWeight: 600,
+  margin: 0,
+};
 
 type Props = {
   open: boolean;
@@ -29,6 +39,7 @@ type FormValues = {
 const normalize = (s: string) => s.trim();
 
 function RuleEditModal({ open, rule, onClose, onUpdated }: Props) {
+  const { token } = theme.useToken();
   const [form] = Form.useForm<FormValues>();
   const [mode, setMode] = useState<UpdateMode>("apply");
   const [submitting, setSubmitting] = useState(false);
@@ -131,11 +142,26 @@ function RuleEditModal({ open, rule, onClose, onUpdated }: Props) {
           <Text type="secondary" style={{ display: "block", marginBottom: 4 }}>
             원본 규칙
           </Text>
-          <div style={{ padding: 8, background: "#fafafa", borderRadius: 4 }}>
-            <Tag color={isDeny ? "red" : "green"}>{isDeny ? "차단" : "허용"}</Tag>{" "}
-            <Tag color="default">from</Tag> <strong>{oldFrom}</strong>{" "}
-            <span style={{ margin: "0 4px" }}>→</span>{" "}
-            <Tag color="default">to</Tag> <strong>{oldTo}</strong>
+          <div
+            style={{
+              padding: 12,
+              background: token.colorBgLayout,
+              border: `1px solid ${token.colorBorder}`,
+              borderRadius: token.borderRadiusSM,
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              flexWrap: "wrap",
+            }}
+          >
+            <Tag color={isDeny ? "red" : "green"} style={tagLabelStyle}>
+              {isDeny ? "DENY" : "ALLOW"}
+            </Tag>
+            <Mono style={{ fontSize: 11, letterSpacing: "0.08em", color: token.colorTextTertiary }}>FROM</Mono>
+            <Mono>{oldFrom}</Mono>
+            <span style={{ color: token.colorTextTertiary }}>→</span>
+            <Mono style={{ fontSize: 11, letterSpacing: "0.08em", color: token.colorTextTertiary }}>TO</Mono>
+            <Mono>{oldTo}</Mono>
           </div>
         </div>
 

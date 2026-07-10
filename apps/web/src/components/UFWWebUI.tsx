@@ -17,6 +17,7 @@ import {
   Tooltip,
   Typography,
   message,
+  theme,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import type {
@@ -45,6 +46,10 @@ import {
 import BulkRuleModal from "./BulkRuleModal";
 import RuleEditModal from "./RuleEditModal";
 import BackupRestoreModal from "./BackupRestoreModal";
+import ThemeToggle from "./ThemeToggle";
+import { Mono } from "../theme/Mono";
+import { monoStyle } from "../theme/tokens";
+import type { ColorSchemeMode } from "../hooks/useColorScheme";
 
 const { Title, Text } = Typography;
 
@@ -82,6 +87,15 @@ const formatCreatedAt = (timestamp: number) => {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 };
 
+// 정책/동작 등 카테고리 라벨을 작은 대문자 + 모노로 표시할 때 쓰는 inline 스타일.
+const tagLabelStyle: React.CSSProperties = {
+  fontFamily: monoStyle.fontFamily,
+  fontSize: 11,
+  letterSpacing: "0.08em",
+  fontWeight: 600,
+  margin: 0,
+};
+
 // 영문/한글 syslog 타임스탬프 둘 다 인식: "Jul  9 12:48:01" 또는 "7월 09 13:14:09"
 const formatLogTime = (raw: string) => {
   const m = raw.match(
@@ -93,7 +107,16 @@ const formatLogTime = (raw: string) => {
   return "";
 };
 
-function UFWWebUI({ setIsLoggedIn }: { setIsLoggedIn: (isLoggedIn: boolean) => void }) {
+function UFWWebUI({
+  setIsLoggedIn,
+  themeMode,
+  onThemeChange,
+}: {
+  setIsLoggedIn: (isLoggedIn: boolean) => void;
+  themeMode: ColorSchemeMode;
+  onThemeChange: (m: ColorSchemeMode) => void;
+}) {
+  const { token } = theme.useToken();
   const [ufwStatus, setUfwStatus] = useState<UfwStatus>({ active: false, rules: [] });
   const [stagedRules, setStagedRules] = useState<StagedRule[]>([]);
   const [addMode, setAddMode] = useState<AddMode>("apply-add");
@@ -364,11 +387,15 @@ function UFWWebUI({ setIsLoggedIn }: { setIsLoggedIn: (isLoggedIn: boolean) => v
         if (record.isAddRow) {
           return (
             <Form.Item name="from" style={{ marginBottom: 0 }}>
-              <Input placeholder="출발지 (예: 10.0.0.0/8)" />
+              <Input placeholder="출발지 (예: 10.0.0.0/8)" style={monoStyle} />
             </Form.Item>
           );
         }
-        return text === "" ? ANYWHERE_LABEL : text;
+        return text === "" ? (
+          <Text type="secondary" style={monoStyle}>ANY</Text>
+        ) : (
+          <Mono>{text}</Mono>
+        );
       },
     },
     {
@@ -379,11 +406,15 @@ function UFWWebUI({ setIsLoggedIn }: { setIsLoggedIn: (isLoggedIn: boolean) => v
         if (record.isAddRow) {
           return (
             <Form.Item name="to" style={{ marginBottom: 0 }}>
-              <Input placeholder="도착지 (예: 22/tcp)" />
+              <Input placeholder="도착지 (예: 22/tcp)" style={monoStyle} />
             </Form.Item>
           );
         }
-        return text === "" ? ANYWHERE_LABEL : text;
+        return text === "" ? (
+          <Text type="secondary" style={monoStyle}>ANY</Text>
+        ) : (
+          <Mono>{text}</Mono>
+        );
       },
     },
     {
@@ -406,9 +437,10 @@ function UFWWebUI({ setIsLoggedIn }: { setIsLoggedIn: (isLoggedIn: boolean) => v
           );
         }
         const policy: FirewallPolicy = (record as Rule).policy ?? "allow";
+        const isDeny = policy === "deny";
         return (
-          <Tag color={policy === "deny" ? "red" : "green"}>
-            {policy === "deny" ? "차단" : "허용"}
+          <Tag color={isDeny ? "red" : "green"} style={tagLabelStyle}>
+            {isDeny ? "DENY" : "ALLOW"}
           </Tag>
         );
       },
@@ -484,25 +516,29 @@ function UFWWebUI({ setIsLoggedIn }: { setIsLoggedIn: (isLoggedIn: boolean) => v
       dataIndex: "action",
       key: "action",
       width: 100,
-      render: (action: StagedRule["action"]) =>
-        action === "delete" ? (
-          <Tag color="red">삭제</Tag>
-        ) : action === "update" ? (
-          <Tag color="blue">수정</Tag>
-        ) : (
-          <Tag color="green">추가</Tag>
-        ),
+      render: (action: StagedRule["action"]) => {
+        if (action === "delete") {
+          return <Tag color="red" style={tagLabelStyle}>DEL</Tag>;
+        }
+        if (action === "update") {
+          return <Tag color="blue" style={tagLabelStyle}>UPD</Tag>;
+        }
+        return <Tag color="green" style={tagLabelStyle}>ADD</Tag>;
+      },
     },
     {
       title: "정책",
       dataIndex: "policy",
       key: "policy",
       width: 90,
-      render: (policy: FirewallPolicy | undefined) => (
-        <Tag color={(policy ?? "allow") === "deny" ? "red" : "green"}>
-          {(policy ?? "allow") === "deny" ? "차단" : "허용"}
-        </Tag>
-      ),
+      render: (policy: FirewallPolicy | undefined) => {
+        const isDeny = (policy ?? "allow") === "deny";
+        return (
+          <Tag color={isDeny ? "red" : "green"} style={tagLabelStyle}>
+            {isDeny ? "DENY" : "ALLOW"}
+          </Tag>
+        );
+      },
     },
     {
       title: "출발지",
@@ -514,21 +550,30 @@ function UFWWebUI({ setIsLoggedIn }: { setIsLoggedIn: (isLoggedIn: boolean) => v
       title: "도착지",
       dataIndex: "to",
       key: "to",
-      render: (text: string) => (text === "" ? ANYWHERE_LABEL : text),
+      render: (text: string) =>
+        text === "" ? (
+          <Text type="secondary" style={monoStyle}>ANY</Text>
+        ) : (
+          <Mono>{text}</Mono>
+        ),
     },
     {
       title: "메모",
       dataIndex: "note",
       key: "note",
       render: (text?: string) =>
-        text ? <span style={{ color: "#666" }}>{text}</span> : <Text type="secondary">—</Text>,
+        text ? (
+          <span style={{ color: token.colorTextSecondary }}>{text}</span>
+        ) : (
+          <Text type="secondary">—</Text>
+        ),
     },
     {
       title: "추가 시각",
       dataIndex: "createdAt",
       key: "createdAt",
       width: 160,
-      render: (t: number) => formatCreatedAt(t),
+      render: (t: number) => <Mono style={{ fontSize: 12, color: token.colorTextSecondary }}>{formatCreatedAt(t)}</Mono>,
     },
     {
       title: "",
@@ -611,14 +656,16 @@ function UFWWebUI({ setIsLoggedIn }: { setIsLoggedIn: (isLoggedIn: boolean) => v
 
       <div
         style={{
-          maxHeight: 240,
+          maxHeight: 280,
           overflowY: "auto",
-          backgroundColor: "#fafafa",
-          padding: 8,
-          border: "1px solid #f0f0f0",
-          borderRadius: 4,
-          fontFamily: "ui-monospace, monospace",
+          background: token.colorBgLayout,
+          padding: 12,
+          border: `1px solid ${token.colorBorder}`,
+          borderRadius: token.borderRadiusSM,
+          fontFamily: monoStyle.fontFamily,
+          fontVariantNumeric: "tabular-nums",
           fontSize: 12,
+          lineHeight: 1.6,
         }}
       >
         {filteredLogs.length === 0 ? (
@@ -674,51 +721,101 @@ function UFWWebUI({ setIsLoggedIn }: { setIsLoggedIn: (isLoggedIn: boolean) => v
   );
 
   return (
-    <div style={{ padding: "20px" }}>
-      <div
+    <div style={{ minHeight: "100vh", background: token.colorBgLayout }}>
+      <div style={{ maxWidth: 1280, margin: "0 auto", padding: "32px 24px" }}>
+      <header
         style={{
           display: "flex",
-          justifyContent: "center",
           alignItems: "center",
-          marginBottom: "20px",
+          justifyContent: "space-between",
+          borderBottom: `1px solid ${token.colorBorder}`,
+          paddingBottom: 20,
+          marginBottom: 24,
+          gap: 16,
+          flexWrap: "wrap",
         }}
       >
-        <Title level={2} style={{ margin: 0, marginRight: "20px" }}>
-          UFW 방화벽 관리
-        </Title>
-        <Switch
-          checked={ufwStatus.active}
-          onChange={toggleUfwStatus}
-          checkedChildren="켜짐"
-          unCheckedChildren="꺼짐"
-        />
-        <Badge
-          count={stagedRules.length}
-          offset={[-8, 8]}
-          style={{ marginLeft: 16, backgroundColor: "#faad14" }}
-        >
-          <Text type="secondary" style={{ marginLeft: 16 }}>대기 작업</Text>
-        </Badge>
-      </div>
+        <div>
+          <Mono
+            block
+            style={{
+              fontSize: 12,
+              letterSpacing: "0.18em",
+              color: token.colorPrimary,
+              marginBottom: 4,
+            }}
+          >
+            UFW · WEBUI
+          </Mono>
+          <Title level={3} style={{ margin: 0, fontWeight: 600, lineHeight: 1.3 }}>
+            방화벽 관리
+          </Title>
+        </div>
 
-      <div style={{ display: "flex", alignItems: "center" }}>
-        <Button
-          type="primary"
-          ghost
-          onClick={() => setBackupOpen(true)}
-          style={{ marginLeft: "auto" }}
-        >
-          백업/복원
-        </Button>
-        <Button
-          ghost
-          onClick={() => setBulkOpen(true)}
-          style={{ marginLeft: 8 }}
-        >
+        <Space size={8} wrap>
+          {/* STATUS · ACTIVE/OFF — 헤더의 핵심 인디케이터. 모노스페이스 라벨. */}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "4px 12px",
+              border: `1px solid ${token.colorBorder}`,
+              borderRadius: token.borderRadiusSM,
+              background: token.colorBgContainer,
+            }}
+          >
+            <Mono style={{ fontSize: 10, letterSpacing: "0.12em", color: token.colorTextTertiary }}>
+              STATUS
+            </Mono>
+            <Mono
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                color: ufwStatus.active ? token.colorSuccess : token.colorTextTertiary,
+              }}
+            >
+              {ufwStatus.active ? "ACTIVE" : "OFF"}
+            </Mono>
+            <span
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: "50%",
+                background: ufwStatus.active ? token.colorSuccess : token.colorTextTertiary,
+              }}
+            />
+            <Switch
+              checked={ufwStatus.active}
+              onChange={toggleUfwStatus}
+              size="small"
+              style={{ marginLeft: 4 }}
+            />
+          </div>
+
+          <Badge
+            count={stagedRules.length}
+            offset={[-4, 4]}
+            style={{ backgroundColor: token.colorWarning }}
+            title="대기 작업 수"
+          >
+            <Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>
+              PENDING
+            </Text>
+          </Badge>
+
+          <ThemeToggle mode={themeMode} onChange={onThemeChange} />
+
+          <Button type="text" onClick={logout} size="small">
+            로그아웃
+          </Button>
+        </Space>
+      </header>
+
+      <div style={{ display: "flex", gap: 8, marginBottom: 20, justifyContent: "flex-end" }}>
+        <Button onClick={() => setBackupOpen(true)}>백업/복원</Button>
+        <Button type="primary" onClick={() => setBulkOpen(true)} ghost>
           + 대량 추가
-        </Button>
-        <Button type="link" onClick={logout} style={{ marginRight: "20px" }}>
-          로그아웃
         </Button>
       </div>
 
@@ -804,6 +901,7 @@ function UFWWebUI({ setIsLoggedIn }: { setIsLoggedIn: (isLoggedIn: boolean) => v
         onClose={() => setBackupOpen(false)}
         onChanged={refreshAll}
       />
+      </div>
     </div>
   );
 }

@@ -1,12 +1,15 @@
 import { useEffect, useState } from "react";
-import { Alert, Button, Form, Input, Spin, message } from "antd";
+import { Alert, Button, Form, Input, Spin, Typography, message, theme } from "antd";
 import { useNavigate } from "react-router-dom";
+import { Mono } from "../theme/Mono";
 import {
   apiAuth,
   apiBootstrapFirst,
   apiUsersExist,
   type AuthSuccess,
 } from "../services/api";
+
+const { Title, Text } = Typography;
 
 type FormValues = {
   username: string;
@@ -25,6 +28,7 @@ const isRateLimited = (err: unknown): { retryAfter: number } | null => {
 };
 
 function LoginForm({ setIsLoggedIn }: { setIsLoggedIn: (isLoggedIn: boolean) => void }) {
+  const { token } = theme.useToken();
   const [loading, setLoading] = useState(false);
   const [bootstrapping, setBootstrapping] = useState(true);
   const [bootstrapMode, setBootstrapMode] = useState(false);
@@ -122,8 +126,8 @@ function LoginForm({ setIsLoggedIn }: { setIsLoggedIn: (isLoggedIn: boolean) => 
           display: "flex",
           justifyContent: "center",
           alignItems: "center",
-          height: "100vh",
-          backgroundColor: "#f0f2f5",
+          minHeight: "100vh",
+          background: token.colorBgLayout,
         }}
       >
         <Spin tip="확인 중..." />
@@ -139,22 +143,43 @@ function LoginForm({ setIsLoggedIn }: { setIsLoggedIn: (isLoggedIn: boolean) => 
         display: "flex",
         justifyContent: "center",
         alignItems: "center",
-        height: "100vh",
-        backgroundColor: "#f0f2f5",
+        minHeight: "100vh",
+        background: token.colorBgLayout,
+        padding: 24,
       }}
     >
       <div
         style={{
-          backgroundColor: "white",
-          padding: "40px",
-          borderRadius: "15px",
-          width: "400px",
-          boxShadow: "0 4px 8px rgba(0, 0, 0, 0.1)",
+          background: token.colorBgContainer,
+          padding: "40px 36px",
+          borderRadius: token.borderRadiusLG,
+          width: 420,
+          maxWidth: "100%",
+          border: `1px solid ${token.colorBorderSecondary}`,
+          boxShadow: token.boxShadowSecondary,
         }}
       >
-        <h2 style={{ textAlign: "center", marginBottom: "20px" }}>
-          {bootstrapMode ? "최초 관리자 설정" : "로그인"}
-        </h2>
+        <div style={{ textAlign: "center", marginBottom: 28 }}>
+          <Mono
+            block
+            style={{
+              fontSize: 12,
+              letterSpacing: "0.18em",
+              color: token.colorPrimary,
+              marginBottom: 8,
+            }}
+          >
+            UFW · WEBUI
+          </Mono>
+          <Title level={3} style={{ margin: 0, fontWeight: 600 }}>
+            {bootstrapMode ? "최초 관리자 설정" : "로그인"}
+          </Title>
+          <Text type="secondary" style={{ fontSize: 13 }}>
+            {bootstrapMode
+              ? "첫 관리자 계정을 등록합니다."
+              : "Linux ufw 방화벽 관리 콘솔"}
+          </Text>
+        </div>
 
         {bootstrapMode && (
           <Alert
@@ -179,21 +204,27 @@ function LoginForm({ setIsLoggedIn }: { setIsLoggedIn: (isLoggedIn: boolean) => 
         <Form<FormValues>
           onFinish={bootstrapMode ? handleBootstrap : handleLogin}
           disabled={cooldown > 0}
+          layout="vertical"
         >
           <Form.Item
             name="username"
+            label={<Mono style={{ fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", color: token.colorTextTertiary }}>아이디</Mono>}
             rules={[{ required: true, message: "아이디를 입력해 주세요." }]}
+            style={{ marginBottom: 16 }}
           >
-            <Input placeholder="아이디" autoComplete="username" />
+            <Input placeholder="admin" autoComplete="username" size="large" />
           </Form.Item>
 
           <Form.Item
             name="password"
+            label={<Mono style={{ fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", color: token.colorTextTertiary }}>비밀번호</Mono>}
             rules={[{ required: true, message: "비밀번호를 입력해 주세요." }]}
+            style={{ marginBottom: 16 }}
           >
             <Input.Password
-              placeholder="비밀번호"
+              placeholder="••••••••"
               autoComplete={bootstrapMode ? "new-password" : "current-password"}
+              size="large"
             />
           </Form.Item>
 
@@ -212,10 +243,12 @@ function LoginForm({ setIsLoggedIn }: { setIsLoggedIn: (isLoggedIn: boolean) => 
                   },
                 }),
               ]}
+              style={{ marginBottom: 24 }}
             >
               <Input.Password
                 placeholder="비밀번호 확인"
                 autoComplete="new-password"
+                size="large"
               />
             </Form.Item>
           )}
@@ -225,7 +258,8 @@ function LoginForm({ setIsLoggedIn }: { setIsLoggedIn: (isLoggedIn: boolean) => 
             htmlType="submit"
             loading={loading}
             disabled={disabled}
-            style={{ width: "100%" }}
+            block
+            size="large"
           >
             {cooldown > 0
               ? `대기 중 (${cooldown}초)`

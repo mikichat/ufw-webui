@@ -1,10 +1,20 @@
 import { useMemo, useState } from "react";
-import { Alert, Input, Modal, Radio, Space, Tag, Typography, message } from "antd";
+import { Alert, Input, Modal, Radio, Space, Tag, Typography, message, theme } from "antd";
 import type { FirewallPolicy } from "@ufw-webui/shared";
 import type { BulkAction, BulkMode, BulkRequest } from "../services/api";
 import { apiBulkRules } from "../services/api";
+import { Mono } from "../theme/Mono";
+import { monoStyle } from "../theme/tokens";
 
 const { Text } = Typography;
+
+const tagLabelStyle: React.CSSProperties = {
+  fontFamily: monoStyle.fontFamily,
+  fontSize: 11,
+  letterSpacing: "0.08em",
+  fontWeight: 600,
+  margin: 0,
+};
 
 type Props = {
   open: boolean;
@@ -59,6 +69,7 @@ const parseAll = (text: string): { parsed: ParsedLine[]; valid: ParsedLine[] } =
 };
 
 function BulkRuleModal({ open, onClose, onApplied }: Props) {
+  const { token } = theme.useToken();
   const [text, setText] = useState<string>(EXAMPLE_LINES.join("\n"));
   const [mode, setMode] = useState<BulkMode>("monitor");
   const [action, setAction] = useState<BulkAction>("add");
@@ -200,6 +211,7 @@ function BulkRuleModal({ open, onClose, onApplied }: Props) {
             rows={8}
             placeholder={"10.0.0.0/8,22/tcp,내부 SSH\n,443/tcp,모든 곳 HTTPS"}
             spellCheck={false}
+            style={{ ...monoStyle, fontSize: 13 }}
           />
         </div>
 
@@ -207,26 +219,32 @@ function BulkRuleModal({ open, onClose, onApplied }: Props) {
           <Text type="secondary">미리보기</Text>
           <div style={{ marginTop: 4 }}>
             <Space wrap>
-              <Tag color={valid.length > 0 ? "green" : "default"}>
-                적용 가능: {valid.length}건
+              <Tag color={valid.length > 0 ? "green" : "default"} style={tagLabelStyle}>
+                VALID {valid.length}
               </Tag>
-              {skipped > 0 && <Tag color="orange">무시 (빈 줄/주석): {skipped}건</Tag>}
-              {parsed.length === 0 && <Tag>입력 대기</Tag>}
+              {skipped > 0 && (
+                <Tag color="orange" style={tagLabelStyle}>
+                  SKIP {skipped}
+                </Tag>
+              )}
+              {parsed.length === 0 && <Tag style={tagLabelStyle}>EMPTY</Tag>}
             </Space>
           </div>
           {valid.length > 0 && (
             <ul style={{ marginTop: 8, marginBottom: 0, paddingLeft: 20 }}>
               {valid.slice(0, 5).map((p, i) => (
-                <li key={i} style={{ fontSize: 12, color: "#666" }}>
-                  <Tag color={policy === "deny" ? "red" : "green"}>
-                    {policy === "deny" ? "차단" : "허용"}
+                <li key={i} style={{ fontSize: 12, color: token.colorTextSecondary }}>
+                  <Tag color={policy === "deny" ? "red" : "green"} style={tagLabelStyle}>
+                    {policy === "deny" ? "DENY" : "ALLOW"}
                   </Tag>{" "}
-                  {p.from || "모든 곳"} → {p.to || "모든 곳"}
+                  <Mono>{p.from || "ANY"}</Mono>
+                  {" → "}
+                  <Mono>{p.to || "ANY"}</Mono>
                   {p.note ? ` — ${p.note}` : ""}
                 </li>
               ))}
               {valid.length > 5 && (
-                <li style={{ fontSize: 12, color: "#999" }}>
+                <li style={{ fontSize: 12, color: token.colorTextTertiary }}>
                   …외 {valid.length - 5}건
                 </li>
               )}
