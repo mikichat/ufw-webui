@@ -8,6 +8,7 @@ import ufwRoutes from "./routes/ufw";
 import stagedRoutes from "./routes/staged";
 import logsRoutes from "./routes/logs";
 import bulkRoutes from "./routes/bulk";
+import backupRoutes from "./routes/backup";
 
 const app = express();
 
@@ -61,6 +62,7 @@ app.use("/api/ufw", ufwRoutes);
 app.use("/api/ufw", stagedRoutes);
 app.use("/api/ufw", logsRoutes);
 app.use("/api/ufw", bulkRoutes);
+app.use("/api/ufw", backupRoutes);
 
 app.get("*", (_req, res) => {
   res.sendFile(path.join(__dirname, "..", "public", "index.html"));

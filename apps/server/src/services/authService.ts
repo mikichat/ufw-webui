@@ -3,10 +3,8 @@ import * as bcrypt from "bcryptjs";
 import fs from "fs";
 import { jwtVerify, SignJWT } from "jose";
 import path from "path";
+import { dataDir, ensureDataDir } from "./paths";
 
-const dataDir = process.env.UFW_WEBUI_DATA_DIR
-  ? path.resolve(process.env.UFW_WEBUI_DATA_DIR)
-  : path.resolve(process.cwd(), "data");
 const usersFilePath = path.join(dataDir, "users.json");
 
 // JWT 시크릿. 환경변수 UFW_WEBUI_JWT_SECRET 가 있으면 사용, 없으면 경고 후 기본값 사용.
@@ -35,10 +33,6 @@ type StoredUser = {
   password: string;
   // bcrypt 해시는 "$2b$" / "$2a$" 로 시작. 이 형식이면 이미 마이그레이션 완료.
   // 그 외 (예: 64자 hex) 는 레거시 SHA256+LEGACY_SALT 형식으로 간주.
-};
-
-const ensureDataDir = () => {
-  fs.mkdirSync(dataDir, { recursive: true });
 };
 
 const getUsers = (): StoredUser[] => {

@@ -169,3 +169,68 @@ export type UpdateResponse =
 
 export const apiUpdateRule = (req: UpdateRequest) =>
   api.post<{ success: true; data: UpdateResponse }>("/ufw/update", req);
+
+// ── 정책 백업 / 복원 ────────────────────────────────────────────────────
+
+export type BackupListEntry = {
+  filename: string;
+  sizeBytes: number;
+  createdAt: number;
+  kind: "manual" | "pre-restore";
+};
+
+export type BackupListResponse = {
+  files: BackupListEntry[];
+  total: number;
+  maxRetained: number;
+};
+
+export const apiListBackups = () =>
+  api.get<{ success: true; data: BackupListResponse }>("/ufw/backup/list");
+
+const triggerBrowserDownload = (blob: Blob, filename: string): void => {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+};
+
+// 현재 UFW 정책 4종을 tar.gz 로 다운로드.
+export const apiDownloadBackup = async (): Promise<void> => {
+  const res = await api.get("/ufw/backup/download", { responseType: "blob" });
+  const cd = (res.headers["content-disposition"] ?? "") as string;
+  const m = cd.match(/filename="?([^";]+)"?/);
+  const filename =
+    m?.[1] ??
+    `ufw-backup-${new Date().toISOString().replace(/[:.]/g, "-")}.tar.gz`;
+  triggerBrowserDownload(res.data as Blob, filename);
+};
+
+// 서버에 보관된 사전 백업(pre-restore) 을 tar.gz 로 다운로드.
+export const apiDownloadStoredBackup = async (filename: string): Promise<void> => {
+  const res = await api.get(
+    `/ufw/backup/download/${encodeURIComponent(filename)}`,
+    { responseType: "blob" },
+  );
+  triggerBrowserDownload(res.data as Blob, filename);
+};
+
+export type RestoreResponse = {
+  restored: string[];
+  preBackup: string;
+  reloaded: boolean;
+  warnings: string[];
+};
+
+export const apiRestoreBackup = (file: File) =>
+  api.post<{ success: true; data: RestoreResponse }>(
+    "/ufw/backup/restore",
+    file,
+    {
+      headers: { "Content-Type": "application/gzip" },
+    },
+  );

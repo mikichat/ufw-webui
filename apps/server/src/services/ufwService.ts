@@ -9,7 +9,7 @@ import type { FirewallPolicy, LogLevel, Rule, UfwStatus } from "@ufw-webui/share
 const DEFAULT_POLICY: FirewallPolicy = "allow";
 const resolvePolicy = (rule: Rule): FirewallPolicy => rule.policy ?? DEFAULT_POLICY;
 
-const executeUfw = (args: string[]): Promise<string> =>
+export const executeUfw = (args: string[]): Promise<string> =>
   new Promise((resolve, reject) => {
     const child = spawn("ufw", args);
     let stdout = "";
@@ -161,3 +161,7 @@ export const getCurrentLogLevel = async (): Promise<LogLevel> => {
   }
   return "low";
 };
+
+// 정책 파일을 외부에서 교체한 뒤 UFW 가 새 파일을 다시 읽어 들이도록 한다.
+// enable/disable 과 달리 reload 는 비활성 상태에서도 안전하므로 --force 불필요.
+export const reloadUfw = async (): Promise<string> => executeUfw(["reload"]);

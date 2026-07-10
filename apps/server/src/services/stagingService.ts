@@ -2,15 +2,9 @@ import fs from "fs";
 import path from "path";
 import { randomUUID } from "crypto";
 import type { FirewallPolicy, Rule, StagedRule } from "@ufw-webui/shared";
+import { dataDir, ensureDataDir } from "./paths";
 
-const dataDir = process.env.UFW_WEBUI_DATA_DIR
-  ? path.resolve(process.env.UFW_WEBUI_DATA_DIR)
-  : path.resolve(process.cwd(), "data");
 const stagedFilePath = path.join(dataDir, "staged-rules.json");
-
-const ensureDataDir = () => {
-  fs.mkdirSync(dataDir, { recursive: true });
-};
 
 const isStagedRule = (v: unknown): v is StagedRule => {
   if (!v || typeof v !== "object") return false;

@@ -44,6 +44,7 @@ import {
 } from "../services/api";
 import BulkRuleModal from "./BulkRuleModal";
 import RuleEditModal from "./RuleEditModal";
+import BackupRestoreModal from "./BackupRestoreModal";
 
 const { Title, Text } = Typography;
 
@@ -106,6 +107,7 @@ function UFWWebUI({ setIsLoggedIn }: { setIsLoggedIn: (isLoggedIn: boolean) => v
   const [logPaused, setLogPaused] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Rule | null>(null);
+  const [backupOpen, setBackupOpen] = useState(false);
   const [form] = Form.useForm<RuleFormValues>();
   const navigate = useNavigate();
   const logTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -703,8 +705,15 @@ function UFWWebUI({ setIsLoggedIn }: { setIsLoggedIn: (isLoggedIn: boolean) => v
         <Button
           type="primary"
           ghost
-          onClick={() => setBulkOpen(true)}
+          onClick={() => setBackupOpen(true)}
           style={{ marginLeft: "auto" }}
+        >
+          백업/복원
+        </Button>
+        <Button
+          ghost
+          onClick={() => setBulkOpen(true)}
+          style={{ marginLeft: 8 }}
         >
           + 대량 추가
         </Button>
@@ -788,6 +797,12 @@ function UFWWebUI({ setIsLoggedIn }: { setIsLoggedIn: (isLoggedIn: boolean) => v
         rule={editTarget}
         onClose={() => setEditTarget(null)}
         onUpdated={refreshAll}
+      />
+
+      <BackupRestoreModal
+        open={backupOpen}
+        onClose={() => setBackupOpen(false)}
+        onChanged={refreshAll}
       />
     </div>
   );
