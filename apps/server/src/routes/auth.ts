@@ -75,6 +75,6 @@ export const authenticateToken = async (
     req.user = await verifyToken(token);
     next();
   } catch (_error) {
-    res.status(400).json({ success: false, error: "Invalid token" });
+    res.status(401).json({ success: false, error: "Invalid token" });
   }
 };

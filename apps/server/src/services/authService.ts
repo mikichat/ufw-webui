@@ -82,7 +82,7 @@ export type AuthResult = {
 const issueToken = async (username: string): Promise<string> => {
   return new SignJWT({ username })
     .setProtectedHeader({ alg: "HS256" })
-    .setExpirationTime("1h")
+    .setExpirationTime("24h")
     .sign(jwtSecret);
 };
 

@@ -33,7 +33,19 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
-    if (error?.response?.status === 429) {
+    const status = error?.response?.status;
+    const url: string = error?.config?.url ?? "";
+
+    // 401: 토큰 만료/위조. /auth/* 자체 호출은 로그인 실패의 정상 응답이므로
+    // 제외하고, 그 외 모든 보호된 엔드포인트의 401 은 강제 로그아웃 처리한다.
+    // React state(isLoggedIn) 와 동기화하기 위해 페이지 전체를 /login 으로 이동.
+    if (status === 401 && !url.startsWith("/auth")) {
+      localStorage.removeItem("token");
+      window.location.assign("/login");
+      return Promise.reject(error);
+    }
+
+    if (status === 429) {
       const body = error.response.data as { error?: string; retryAfter?: number } | undefined;
       const msg = body?.error ?? "너무 많은 요청. 잠시 후 다시 시도하세요.";
       const retryAfter = typeof body?.retryAfter === "number" ? body.retryAfter : undefined;
